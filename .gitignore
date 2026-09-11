@@ -7,3 +7,6 @@ public/pdf.worker.min.mjs
 !.env.example
 *.pdf
 tmp/
+/dist/
+.vinext/
+.wrangler/
