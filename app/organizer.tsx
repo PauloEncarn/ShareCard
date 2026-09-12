@@ -169,7 +169,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       setBusy(false);
     }
     setState(prev => ({ ...prev, people: prev.statements.length === 1 && prev.statements[0].id === 'demo' ? prev.people.filter(p => !['ana', 'bruno', 'clara'].includes(p.id)) : prev.people, statements: [...prev.statements.filter(s => s.id !== 'demo'), candidate], activeId: candidate.id }));
-    setCandidate(null); setCandidateFile(null); setTab('overview'); setSearch(''); setFilter('all'); setCategory('all'); setFormError(''); setMessage(cloudMaster ? 'Fatura salva no S3 e no DynamoDB. Agora você pode dividir as compras.' : 'Fatura importada. Agora você pode dividir as compras.');
+    setCandidate(null); setCandidateFile(null); setTab('overview'); setSearch(''); setFilter('all'); setCategory('all'); setFormError(''); setMessage(cloudMaster ? 'Fatura salva. Agora você pode dividir as compras.' : 'Fatura importada. Agora você pode dividir as compras.');
   }
   function assign(id: string, personId: string) {
     updateStatement(s => ({ ...s, transactions: s.transactions.map(t => t.id === id && !isSharedCost(t) ? { ...t, allocations: personId ? [{ personId, cents: t.cents }] : [] } : t) }));
@@ -243,8 +243,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       <a className="brand brand-logo" href="/" aria-label="ShareCard"><img src="/brand/sharecard_symbol.png" alt="ShareCard"/></a>
       <div className="workspace-label">SEU ORGANIZADOR</div>
       <nav aria-label="Navegação principal">{[{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'transactions', label: 'Lançamentos', icon: CreditCard }, { id: 'people', label: 'Pessoas', icon: Users }, { id: 'forecast', label: 'Próximas faturas', icon: TrendingUp }].map(item => <button key={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}><span className="nav-icon"><item.icon width={20} height={20}/></span><span>{item.label}</span>{tab === item.id && <span className="nav-mark"/>}</button>)}</nav>
-      <a className="cloud-entry" href="/conta"><Cloud width={18} height={18}/><span>Conta e nuvem<small>Floci · backend Node.js</small></span><ChevronRight width={15} height={15}/></a>
-      <div className="sidebar-note"><ShieldCheck width={24} height={24}/><strong>Seu dinheiro.<br/>Sua privacidade.</strong><p>PDF processado neste dispositivo, sem envio para servidores.</p><span><LockKeyhole width={12} height={12}/> Versão local</span></div>
+      <a className="cloud-entry" href="/conta"><Cloud width={18} height={18}/><span>Sua conta<small>Faturas e compras compartilhadas</small></span><ChevronRight width={15} height={15}/></a>
+      <div className="sidebar-note"><ShieldCheck width={24} height={24}/><strong>Seu dinheiro.<br/>Sua privacidade.</strong><p>Suas faturas e informações ficam protegidas no seu espaço.</p><span><LockKeyhole width={12} height={12}/> Versão local</span></div>
       <button className="backup-button" onClick={downloadBackup} disabled={!ready}><ArrowDownToLine width={17} height={17}/> Exportar backup</button>
       <button className="backup-button" onClick={() => backupInput.current?.click()}><Upload width={17} height={17}/> Restaurar backup</button>
       <input ref={backupInput} type="file" hidden accept=".json" onChange={async e => {
@@ -253,7 +253,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
         catch { setMessage('Não foi possível restaurar: o backup é inválido.'); }
         finally { e.target.value = ''; }
       }}/>
-      <div className="local-user"><span className="user-avatar">EU</span><div>Meu espaço<small>Salvo neste navegador</small></div></div>
+      <div className="local-user"><span className="user-avatar">EU</span><div>Meu espaço<small>Organize suas faturas</small></div></div>
     </aside>
 
     <main>
