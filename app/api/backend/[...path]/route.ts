@@ -38,12 +38,6 @@ async function handle(request: Request, context: Context) {
       response.headers.append('Set-Cookie', `fatura_session=${login.token}; HttpOnly; SameSite=Strict; Path=/api/backend; Max-Age=28800`);
       return response;
     }
-    if (post && path === 'demo-login') {
-      const login = await api.demoLogin(input.role);
-      const response = Response.json(login, { headers });
-      response.headers.append('Set-Cookie', `fatura_session=${login.token}; HttpOnly; SameSite=Strict; Path=/api/backend; Max-Age=28800`);
-      return response;
-    }
     const account = await api.authenticate(token);
     if (!post && path === 'me') return Response.json(publicAccount(account), { headers });
     if (post && path === 'logout') {

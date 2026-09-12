@@ -27,9 +27,7 @@ export default function CloudWorkspace() {
     setCards(nextCards); setDocuments(nextDocuments); setMembers(nextMembers);
   }, []);
   useEffect(() => {
-    const demo = new URLSearchParams(window.location.search).get('demo');
-    const session = demo === 'master' || demo === 'buyer' ? api<{account: Account}>('demo-login', json({ role: demo })).then(result => result.account) : api<Account>('me');
-    session.then(async current => { setAccount(current); await refresh(current); }).catch(() => {}).finally(() => setLoading(false));
+    api<Account>('me').then(async current => { setAccount(current); await refresh(current); }).catch(() => {}).finally(() => setLoading(false));
   }, [refresh]);
   useEffect(() => { if (new URLSearchParams(window.location.search).get('invite')) setMode('register'); }, []);
   async function authenticate(event: FormEvent<HTMLFormElement>) {
@@ -40,11 +38,6 @@ export default function CloudWorkspace() {
       if (mode === 'register') await api<Account>('register', json(payload));
       const result = await api<{account: Account}>('login', json(payload)); setAccount(result.account); await refresh(result.account);
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
-  }
-  async function demoAuthenticate(role: 'master'|'buyer') {
-    setBusy(true); setError('');
-    try { const result = await api<{account: Account}>('demo-login', json({ role })); setAccount(result.account); await refresh(result.account); }
-    catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createCard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);

@@ -44,23 +44,6 @@ export class Backend {
     await this.store.put(`SESSION#${digest(token)}`, 'PROFILE', { userId: account.id, expiresAt });
     return { token, expiresAt, account: publicAccount(account) };
   }
-  async demoLogin(role: unknown) {
-    if (process.env.BACKEND_MODE !== 'floci') throw new ApiError(404, 'Acesso de demonstração indisponível.');
-    const buyer = role === 'buyer', masterEmail = 'master.demo@sharecard.local', buyerEmail = 'comprador.demo@sharecard.local', password = 'sharecard-demo-password-2026';
-    const wantedEmail = buyer ? buyerEmail : masterEmail;
-    const existing = await this.store.get<{ userId: string }>(`EMAIL#${digest(wantedEmail)}`);
-    if (!existing) {
-      if (buyer) {
-        let master = await this.store.get<{ userId: string }>(`EMAIL#${digest(masterEmail)}`);
-        if (!master) { await this.register({ name: 'Marina Demo', email: masterEmail, password }); master = await this.store.get<{ userId: string }>(`EMAIL#${digest(masterEmail)}`); }
-        const masterAccount = master && await this.store.get<Account>(`USER#${master.userId}`);
-        if (!masterAccount) throw new ApiError(503, 'Não foi possível preparar a demonstração.');
-        const invite = await this.invite(masterAccount, buyerEmail);
-        await this.register({ name: 'Rafael Demo', email: buyerEmail, password, inviteToken: invite.token });
-      } else await this.register({ name: 'Marina Demo', email: masterEmail, password });
-    }
-    return this.login({ email: wantedEmail, password });
-  }
   async authenticate(token: string) {
     if (!/^[a-f0-9]{64}$/.test(token)) throw new ApiError(401, 'Faça login.');
     const session = await this.store.get<Session>(`SESSION#${digest(token)}`);
