@@ -6,7 +6,8 @@ import { ArrowLeft, Calendar as CalendarDays, Check, Cloud, CreditCard, Download
 type Account = { id: string; masterId: string; role: 'master' | 'buyer'; name: string; email: string; active: boolean; avatarUrl?: string | null };
 type Card = { id: string; name: string; dueDay: number };
 type Document = { id: string; cardId: string; dueDate: string; size: number; createdAt: string };
-const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'supabase' ? 'supabase' : 'floci';
+const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || !hasSupabase ? 'floci' : 'supabase';
 const endpoint = (path: string) => accountBackend === 'floci' ? `/api/backend/${path}` : ['register', 'login', 'me', 'logout'].includes(path) ? `/api/supabase/auth/${path}` : `/api/supabase/workspace/${path}`;
 const api = async <T,>(path: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(endpoint(path), { credentials: 'same-origin', ...options, headers: { ...(options?.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...options?.headers } });
