@@ -58,12 +58,12 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createCard(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
-    try { await api('cards', json({ name: form.get('name'), dueDay: Number(form.get('dueDay')) })); await refresh(account!); event.currentTarget.reset(); setNotice('Cartão cadastrado.'); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
+    event.preventDefault(); const target = event.currentTarget; setBusy(true); setError(''); const form = new FormData(target);
+    try { await api('cards', json({ name: form.get('name'), dueDay: Number(form.get('dueDay')) })); await refresh(account!); target.reset(); setNotice('Cartão cadastrado.'); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
-    try { const result = await api<{token:string}>('invites', json({ email: form.get('email') })); setInvite(`${window.location.origin}/acesso?invite=${result.token}`); setNotice('Link de convite criado. Copie e envie à pessoa.'); event.currentTarget.reset(); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
+    event.preventDefault(); const target = event.currentTarget; setBusy(true); setError(''); const form = new FormData(target);
+    try { const result = await api<{token:string}>('invites', json({ email: form.get('email') })); setInvite(`${window.location.origin}/acesso?invite=${result.token}`); setNotice('Link de convite criado. Copie e envie à pessoa.'); target.reset(); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function upload(file?: File, cardId?: string, dueDate?: string) {
     if (!file || !cardId || !dueDate) return; setBusy(true); setError('');

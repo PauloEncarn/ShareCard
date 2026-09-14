@@ -1,5 +1,5 @@
 import { accountFromAccessToken, IdentityError } from '@/lib/supabase/identity';
-import { cards, createCard, documentUrl, documents, invite, members, people, revokeMember, savePerson, saveWorkspace, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
+import { buyerSummary, cards, createCard, documentUrl, documents, invite, members, people, revokeMember, savePerson, saveWorkspace, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,7 @@ async function handle(request: Request, context: Context) {
     if (request.method === 'GET' && path === 'members') return Response.json(await members(account), { headers });
     if (request.method === 'GET' && path === 'documents') return Response.json(await documents(account), { headers });
     if (request.method === 'GET' && path === 'workspace') return Response.json(await workspace(account), { headers });
+    if (request.method === 'GET' && path === 'buyer-summary') return Response.json(await buyerSummary(account), { headers });
     if (request.method === 'GET' && path.startsWith('documents/')) return Response.redirect(await documentUrl(account, path.slice('documents/'.length)), 302);
     if (request.method !== 'POST') throw new IdentityError(404, 'Rota não encontrada.');
     if (path === 'documents') {
