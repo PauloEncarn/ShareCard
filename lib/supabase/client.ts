@@ -1,24 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-function required(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') {
-  const value = process.env[name];
-  if (!value) throw new Error(`Configure ${name} para usar o Supabase.`);
+function requiredUrl() {
+  const value = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!value) throw new Error('Configure SUPABASE_URL no ambiente do servidor.');
   return value;
 }
 
-/** Client safe for browser components: it only uses the publishable key. */
-export function createSupabaseBrowserClient() {
-  return createClient(
-    required('NEXT_PUBLIC_SUPABASE_URL'),
-    required('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-  );
+function requiredPublishableKey() {
+  const value = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!value) throw new Error('Configure SUPABASE_PUBLISHABLE_KEY no ambiente do servidor.');
+  return value;
 }
 
-/** Server-side client that uses the public key for normal Auth operations. */
+/** Only use this from code that is safe to run in the browser. */
+export function createSupabaseBrowserClient() {
+  return createClient(requiredUrl(), requiredPublishableKey());
+}
+
+/** Server-side client used for normal Supabase Auth operations. */
 export function createSupabasePublicClient() {
-  return createClient(
-    required('NEXT_PUBLIC_SUPABASE_URL'),
-    required('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
+  return createClient(requiredUrl(), requiredPublishableKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
