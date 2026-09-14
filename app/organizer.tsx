@@ -233,7 +233,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand brand-logo" href="/" aria-label="ShareCard"><img src="/brand/sharecard_symbol.png" alt="ShareCard"/></a>
+      <a className="brand brand-logo" href="/organizador" aria-label="Visão geral do ShareCard"><img src="/brand/sharecard_symbol.png" alt="ShareCard"/></a>
       <div className="workspace-label">SEU ORGANIZADOR</div>
       <nav aria-label="Navegação principal">{[{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'transactions', label: 'Lançamentos', icon: CreditCard }, { id: 'people', label: 'Pessoas', icon: Users }, { id: 'cards', label: 'Cartões e grupo', icon: CreditCard }, { id: 'forecast', label: 'Próximas faturas', icon: TrendingUp }, { id: 'account', label: 'Minha conta', icon: Wallet }].map(item => <button key={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}><span className="nav-icon"><item.icon width={20} height={20}/></span><span>{item.label}</span>{tab === item.id && <span className="nav-mark"/>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck width={24} height={24}/><strong>Seu dinheiro.<br/>Sua privacidade.</strong><p>Suas faturas e informações ficam protegidas no seu espaço.</p><span><LockKeyhole width={12} height={12}/> Dados protegidos</span></div>
