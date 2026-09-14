@@ -27,12 +27,10 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const router = useRouter();
   const stateRef = useRef(state);
   stateRef.current = state;
-  const [localTab, setLocalTab] = useState(initialTab);
-  const tab = initialTab === 'people' ? 'people' : localTab;
+  const tab = initialTab;
   function setTab(next: string) {
-    if (next === 'people') { router.push('/pessoas'); return; }
-    if (initialTab === 'people') { router.push('/organizador?view=' + next); return; }
-    setLocalTab(next);
+    const routes: Record<string, string> = { overview: '/organizador', transactions: '/organizador/lancamentos', people: '/pessoas', cards: '/cartoes', forecast: '/organizador/previsoes', account: '/perfil' };
+    router.push(routes[next] || '/organizador');
   }
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
