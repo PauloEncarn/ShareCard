@@ -29,7 +29,7 @@ const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)
 
 export default function CloudWorkspace({ embedded = false, section = 'management' }: { embedded?: boolean; section?: 'profile' | 'management' }) {
   const initial = cachedWorkspace(section);
-  const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => embedded && !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [mode, setMode] = useState<'login'|'register'>('login');
   const [invite, setInvite] = useState(''), [busy, setBusy] = useState(false); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async (current: Account) => {
@@ -45,7 +45,10 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   useEffect(() => {
     const cached = cachedWorkspace(section);
     if (cached) { setAccount(cached.account); setCards(cached.cards); setDocuments(cached.documents); setMembers(cached.members); setLoading(false); return; }
-    api<Account>('me').then(async current => { setAccount(current); await refresh(current); }).catch(() => { workspaceCache = null; }).finally(() => setLoading(false));
+    api<Account>('me').then(async current => {
+      if (!embedded) { window.location.replace('/organizador'); return; }
+      setAccount(current); await refresh(current);
+    }).catch(() => { workspaceCache = null; }).finally(() => setLoading(false));
   }, [refresh, section]);
   useEffect(() => { if (new URLSearchParams(window.location.search).get('invite')) setMode('register'); }, []);
   async function authenticate(event: FormEvent<HTMLFormElement>) {
