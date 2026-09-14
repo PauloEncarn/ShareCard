@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createSupabaseAdminClient } from './admin';
 import { IdentityError, type SupabaseAccount } from './identity';
 
-type CardRow = { id: string; master_id: string; name: string; due_day: number; created_at: string };
+type CardRow = { id: string; master_id: string; name: string; due_day: number; issuer: string; last4: string | null; created_at: string };
 type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
 type StatementRow = { id: string; master_id: string; card_id: string; due_date: string; filename: string; storage_path: string; sha256: string; size_bytes: number; created_at: string };
@@ -21,7 +21,7 @@ const cents = (value: unknown) => {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new IdentityError(400, 'Meta inválida.');
   return value as number;
 };
-const publicCard = (row: CardRow) => ({ id: row.id, masterId: row.master_id, name: row.name, dueDay: row.due_day, createdAt: row.created_at });
+const publicCard = (row: CardRow) => ({ id: row.id, masterId: row.master_id, name: row.name, dueDay: row.due_day, issuer: row.issuer, last4: row.last4, createdAt: row.created_at });
 const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id, accountId: row.account_id, name: row.name, color: row.color, monthlyLimitCents: row.monthly_limit_cents, version: row.version, createdAt: row.created_at, updatedAt: row.updated_at });
 const publicMember = (row: ProfileRow, email: string) => ({ id: row.id, masterId: row.master_id, role: row.role, name: row.name, email, active: row.active, avatarUrl: null });
 const publicDocument = (row: StatementRow) => ({ id: row.id, masterId: row.master_id, cardId: row.card_id, dueDate: row.due_date, size: row.size_bytes, sha256: row.sha256, createdAt: row.created_at });
@@ -31,14 +31,14 @@ function masterOnly(account: SupabaseAccount) {
 }
 
 export async function cards(account: SupabaseAccount) {
-  const result = await createSupabaseAdminClient().from('cards').select('id, master_id, name, due_day, created_at').eq('master_id', account.masterId).order('due_day').returns<CardRow[]>();
+  const result = await createSupabaseAdminClient().from('cards').select('id, master_id, name, due_day, issuer, last4, created_at').eq('master_id', account.masterId).order('due_day').returns<CardRow[]>();
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar os cartões.');
   return (result.data || []).map(publicCard);
 }
 
 export async function createCard(account: SupabaseAccount, input: Record<string, unknown>) {
   masterOnly(account);
-  const result = await createSupabaseAdminClient().from('cards').insert({ master_id: account.masterId, name: text(input.name, 'Nome do cartão', 100), due_day: day(input.dueDay) }).select('id, master_id, name, due_day, created_at').single<CardRow>();
+  const result = await createSupabaseAdminClient().from('cards').insert({ master_id: account.masterId, name: text(input.name, 'Nome do cartão', 100), due_day: day(input.dueDay), issuer: typeof input.issuer === 'string' && input.issuer.trim() ? input.issuer.trim().slice(0, 40) : 'Itaú', last4: typeof input.last4 === 'string' && /^\d{4}$/.test(input.last4) ? input.last4 : null }).select('id, master_id, name, due_day, issuer, last4, created_at').single<CardRow>();
   if (result.error || !result.data) throw new IdentityError(503, 'Não foi possível criar o cartão.');
   return publicCard(result.data);
 }

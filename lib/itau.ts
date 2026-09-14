@@ -28,7 +28,8 @@ export function parseItau(pages: PdfPage[], filename: string, fingerprint: strin
   if (!dateMatch) throw new Error('Não foi possível identificar o vencimento.');
   const total = first.map(l => /Total desta fatura/.test(l) ? getAmount(l) : undefined).find(v => v !== undefined);
   if (total === undefined) throw new Error('Não foi possível identificar o total da fatura.');
-  const statement: Statement = { id: fingerprint, fingerprint, filename, dueDate: `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`, total, transactions: [], holderTotals: [], warnings: [], importedAt: new Date().toISOString() };
+  const cardMatch = text.match(/cart[aã]o[^\n]{0,50}?(?:final|terminad[oa]|n[úu]mero)[^\d]*(\d{4})/i) || text.match(/(?:\*{2,}|x{2,})\s*(\d{4})/i);
+  const statement: Statement = { id: fingerprint, fingerprint, filename, dueDate: `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`, total, card: { issuer: 'Itaú', ...(cardMatch?.[1] ? { last4: cardMatch[1] } : {}), dueDay: Number(dateMatch[1]) }, transactions: [], holderTotals: [], warnings: [], importedAt: new Date().toISOString() };
   let section: 'none' | 'current' | 'services' | 'future' = 'none';
   let holder = 'Portador não identificado', last: Transaction | undefined;
   const future: Transaction[] = [];
