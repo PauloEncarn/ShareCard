@@ -4,8 +4,8 @@ import { emptyState, type AppState } from '@/lib/model';
 import { validateBackup } from '@/lib/storage';
 type StateContext = { state: AppState; setState: Dispatch<SetStateAction<AppState>>; ready: boolean; storageError: string; setStorageError: Dispatch<SetStateAction<string>> };
 const Context = createContext<StateContext | null>(null);
-const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || !hasSupabase ? 'floci' : 'supabase';
+const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
 const identityEndpoint = accountBackend === 'supabase' ? '/api/supabase/auth/me' : '/api/backend/me';
 const workspaceEndpoint = accountBackend === 'supabase' ? '/api/supabase/workspace/workspace' : '/api/backend/workspace';
 export function StateProvider({ children }: { children: ReactNode }) {
