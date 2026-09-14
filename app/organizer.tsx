@@ -33,7 +33,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const tab = initialTab === 'people' ? 'people' : localTab;
   function setTab(next: string) {
     if (next === 'people') { router.push('/pessoas'); return; }
-    if (initialTab === 'people') { router.push('/?view=' + next); return; }
+    if (initialTab === 'people') { router.push('/organizador?view=' + next); return; }
     setLocalTab(next);
   }
   const [message, setMessage] = useState('');
