@@ -48,6 +48,17 @@ export async function createCard(account: SupabaseAccount, input: Record<string,
   if (result.error || !result.data) throw new IdentityError(503, 'Não foi possível criar o cartão.');
   return publicCard(result.data);
 }
+export async function deleteCard(account: SupabaseAccount, rawId: unknown) {
+  masterOnly(account);
+  const id = text(rawId, 'Cartão', 80), admin = createSupabaseAdminClient();
+  const linked = await admin.from('statements').select('id').eq('card_id', id).eq('master_id', account.masterId).limit(1);
+  if (linked.error) throw new IdentityError(503, 'Não foi possível verificar as faturas deste cartão.');
+  if (linked.data?.length) throw new IdentityError(409, 'Este cartão possui faturas salvas. Exclua as faturas antes de excluir o cartão.');
+  const removed = await admin.from('cards').delete().eq('id', id).eq('master_id', account.masterId).select('id').maybeSingle();
+  if (removed.error) throw new IdentityError(503, 'Não foi possível excluir o cartão.');
+  if (!removed.data) throw new IdentityError(404, 'Cartão não encontrado. Atualize a tela e tente novamente.');
+  return { ok: true };
+}
 export async function people(account: SupabaseAccount) {
   const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
   if (result.error) throw new IdentityError(503, 'NÃ£o foi possÃ­vel consultar as pessoas.');
