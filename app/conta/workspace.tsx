@@ -6,6 +6,13 @@ import { ArrowLeft, ArrowRight, Calendar as CalendarDays, Check, Cloud, CreditCa
 type Account = { id: string; masterId: string; role: 'master' | 'buyer'; name: string; email: string; active: boolean; avatarUrl?: string | null };
 type Card = { id: string; name: string; dueDay: number };
 type Document = { id: string; cardId: string; dueDate: string; size: number; createdAt: string };
+type WorkspaceCache = { account: Account; cards: Card[]; documents: Document[]; members: Account[]; managementLoaded: boolean; updatedAt: number };
+const CACHE_TTL_MS = 45_000;
+let workspaceCache: WorkspaceCache | null = null;
+const cachedWorkspace = (section: 'profile' | 'management') => {
+  if (!workspaceCache || Date.now() - workspaceCache.updatedAt > CACHE_TTL_MS) return null;
+  return section === 'profile' || workspaceCache.managementLoaded ? workspaceCache : null;
+};
 const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
 const endpoint = (path: string) => accountBackend === 'floci' ? `/api/backend/${path}` : ['register', 'login', 'me', 'logout'].includes(path) ? `/api/supabase/auth/${path}` : `/api/supabase/workspace/${path}`;
@@ -20,16 +27,24 @@ const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString
 const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
 export default function CloudWorkspace({ embedded = false, section = 'management' }: { embedded?: boolean; section?: 'profile' | 'management' }) {
-  const [account, setAccount] = useState<Account | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [cards, setCards] = useState<Card[]>([]), [documents, setDocuments] = useState<Document[]>([]), [members, setMembers] = useState<Account[]>([]), [mode, setMode] = useState<'login'|'register'>('login');
+  const initial = cachedWorkspace(section);
+  const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [mode, setMode] = useState<'login'|'register'>('login');
   const [invite, setInvite] = useState(''), [busy, setBusy] = useState(false); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async (current: Account) => {
+    if (section === 'profile') {
+      workspaceCache = { ...(workspaceCache ?? { cards: [], documents: [], members: [], managementLoaded: false }), account: current, updatedAt: Date.now() };
+      return;
+    }
     const [nextCards, nextDocuments, nextMembers] = await Promise.all([api<Card[]>('cards'), api<Document[]>('documents'), current.role === 'master' ? api<Account[]>('members') : Promise.resolve([])]);
     setCards(nextCards); setDocuments(nextDocuments); setMembers(nextMembers);
-  }, []);
+    workspaceCache = { account: current, cards: nextCards, documents: nextDocuments, members: nextMembers, managementLoaded: true, updatedAt: Date.now() };
+  }, [section]);
   useEffect(() => {
-    api<Account>('me').then(async current => { setAccount(current); await refresh(current); }).catch(() => {}).finally(() => setLoading(false));
-  }, [refresh]);
+    const cached = cachedWorkspace(section);
+    if (cached) { setAccount(cached.account); setCards(cached.cards); setDocuments(cached.documents); setMembers(cached.members); setLoading(false); return; }
+    api<Account>('me').then(async current => { setAccount(current); await refresh(current); }).catch(() => { workspaceCache = null; }).finally(() => setLoading(false));
+  }, [refresh, section]);
   useEffect(() => { if (new URLSearchParams(window.location.search).get('invite')) setMode('register'); }, []);
   async function authenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
@@ -60,7 +75,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     catch (reason) { setError((reason as Error).message); }
     finally { setBusy(false); if (avatarInput.current) avatarInput.current.value = ''; }
   }
-  async function logout() { await api('logout', json({})).catch(() => {}); setAccount(null); setCards([]); setDocuments([]); setMembers([]); }
+  async function logout() { await api('logout', json({})).catch(() => {}); workspaceCache = null; setAccount(null); setCards([]); setDocuments([]); setMembers([]); }
   if (loading) return embedded ? <section className="account-embedded-loading" aria-label="Carregando dados da conta"><span/></section> : <main className="cloud-loading"><Cloud/><span>Conectando ao seu espaço…</span></main>;
   if (!account && embedded) return <section className="account-auth-required panel"><span className="eyebrow">ACESSO NECESSÁRIO</span><h2>Entre para abrir seu espaço.</h2><p>Cartões, faturas e compradores ficam disponíveis após o login.</p><a className="button primary" href="/acesso">Entrar ou criar conta <ArrowRight/></a></section>;
   if (!account) return <main className="auth-shell auth-experience">
