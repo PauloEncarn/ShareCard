@@ -37,7 +37,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
       const linkToken = new URLSearchParams(window.location.search).get('invite');
       const payload = { name: form.get('name'), email: form.get('email'), password: form.get('password'), ...((form.get('inviteToken') || linkToken) ? { inviteToken: form.get('inviteToken') || linkToken } : {}) };
       if (mode === 'register') await api<Account>('register', json(payload));
-      const result = await api<{account: Account}>('login', json(payload)); setAccount(result.account); await refresh(result.account); window.location.assign('/organizador');
+      await api<{account: Account}>('login', json(payload)); window.location.replace('/organizador'); return;
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createCard(event: FormEvent<HTMLFormElement>) {
