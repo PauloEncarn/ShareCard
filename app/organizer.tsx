@@ -15,6 +15,12 @@ const dateLabel = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateStrin
 const monthLabel = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('');
 type CloudCard = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null };
+const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const cloudBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
+const cloudEndpoint = (path: string) => cloudBackend === 'floci'
+  ? `/api/backend/${path}`
+  : path === 'me' ? '/api/supabase/auth/me' : `/api/supabase/workspace/${path}`;
+const cardLabel = (card: NonNullable<Statement['card']>) => `${card.issuer}${card.last4 ? ` •••• ${card.last4}` : ` · vence dia ${card.dueDay}`}`;
 function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); return () => ref.current?.close(); }, []);
@@ -72,9 +78,9 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   useEffect(() => {
     const loadCloud = async () => {
       try {
-        const me = await fetch('/api/backend/me', { credentials: 'same-origin' });
+        const me = await fetch(cloudEndpoint('me'), { credentials: 'same-origin' });
         if (!me.ok || (await me.json() as { role: string }).role !== 'master') return;
-        const response = await fetch('/api/backend/cards', { credentials: 'same-origin' });
+        const response = await fetch(cloudEndpoint('cards'), { credentials: 'same-origin' });
         if (!response.ok) return;
         const cards = await response.json() as CloudCard[];
         setCloudMaster(true); setCloudCards(cards); setCloudCardId(cards[0]?.id || '');
@@ -159,12 +165,29 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     if (!candidate || sum(candidate.transactions) !== candidate.total || !candidate.dueDate || !candidate.transactions.length) return;
     if (state.statements.some(s => s.dueDate === candidate.dueDate && s.total === candidate.total && s.id !== 'demo')) { setFormError('Já existe uma fatura com este vencimento e total. Confira o histórico antes de importar novamente.'); return; }
     if (cloudMaster) {
-      if (!candidateFile || !cloudCardId) { setFormError(cloudCards.length ? 'Selecione o cartão desta fatura.' : 'Cadastre um cartão em Conta e nuvem antes de importar.'); return; }
+      if (!candidateFile) { setFormError('Selecione o PDF da fatura novamente.'); return; }
       setBusy(true);
       try {
-        const form = new FormData(); form.set('file', candidateFile); form.set('cardId', cloudCardId); form.set('dueDate', candidate.dueDate); form.set('statement', JSON.stringify(candidate));
-        const response = await fetch('/api/backend/statements/import', { method: 'POST', credentials: 'same-origin', body: form });
-        const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a fatura na nuvem.');
+        let selectedCardId = cloudCardId;
+        if (!selectedCardId && candidate.card) {
+          const response = await fetch(cloudEndpoint('cards'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: cardLabel(candidate.card), dueDay: candidate.card.dueDay, issuer: candidate.card.issuer, last4: candidate.card.last4 }) });
+          const created = await response.json() as CloudCard & { error?: string };
+          if (!response.ok) throw new Error(created.error || 'Não foi possível cadastrar o cartão identificado.');
+          selectedCardId = created.id;
+          setCloudCards(previous => [...previous, created].sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name)));
+          setCloudCardId(created.id);
+        }
+        if (!selectedCardId) throw new Error('Não identificamos o cartão. Selecione um cartão antes de importar.');
+        if (cloudBackend === 'supabase') {
+          const response = await fetch(`${cloudEndpoint('documents')}?cardId=${encodeURIComponent(selectedCardId)}&dueDate=${encodeURIComponent(candidate.dueDate)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf', 'X-ShareCard-Filename': candidateFile.name }, body: candidateFile });
+          const result = await response.json() as { error?: string };
+          if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a fatura na nuvem.');
+        } else {
+          const form = new FormData(); form.set('file', candidateFile); form.set('cardId', selectedCardId); form.set('dueDate', candidate.dueDate); form.set('statement', JSON.stringify(candidate));
+          const response = await fetch(cloudEndpoint('statements/import'), { method: 'POST', credentials: 'same-origin', body: form });
+          const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a fatura na nuvem.');
+        }
+        window.sessionStorage.setItem('sharecard:workspace-stale', '1');
       } catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível salvar a fatura na nuvem.'); setBusy(false); return; }
       setBusy(false);
     }

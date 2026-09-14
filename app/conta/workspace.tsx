@@ -10,6 +10,7 @@ type WorkspaceCache = { account: Account; cards: Card[]; documents: Document[]; 
 const CACHE_TTL_MS = 45_000;
 let workspaceCache: WorkspaceCache | null = null;
 const cachedWorkspace = (section: 'profile' | 'management') => {
+  if (typeof window !== 'undefined' && window.sessionStorage.getItem('sharecard:workspace-stale') === '1') return null;
   if (!workspaceCache || Date.now() - workspaceCache.updatedAt > CACHE_TTL_MS) return null;
   return section === 'profile' || workspaceCache.managementLoaded ? workspaceCache : null;
 };
@@ -39,6 +40,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     const [nextCards, nextDocuments, nextMembers] = await Promise.all([api<Card[]>('cards'), api<Document[]>('documents'), current.role === 'master' ? api<Account[]>('members') : Promise.resolve([])]);
     setCards(nextCards); setDocuments(nextDocuments); setMembers(nextMembers);
     workspaceCache = { account: current, cards: nextCards, documents: nextDocuments, members: nextMembers, managementLoaded: true, updatedAt: Date.now() };
+    window.sessionStorage.removeItem('sharecard:workspace-stale');
   }, [section]);
   useEffect(() => {
     const cached = cachedWorkspace(section);
