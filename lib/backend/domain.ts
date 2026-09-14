@@ -13,22 +13,22 @@ export type AllocationRecord = { personId: string; cents: number };
 export type TransactionRecord = { id: string; statementId: string; masterId: string; date: string; merchant: string; cents: number; holder: string; category: string; installment?: { current: number; total: number }; nextCents?: number; kind: 'purchase' | 'service'; allocations: AllocationRecord[]; carryForward: boolean; note?: string; buyerId?: string | null; sharedCost?: boolean; version: number; updatedAt: string };
 export type StatementRecord = Document & { fingerprint: string; filename: string; total: number; nextTotal?: number; laterTotal?: number; holderTotals: { name: string; cents: number }[]; warnings: string[]; importedAt: string; version: number; transactionCount: number };
 export function text(value: unknown, label: string, max = 100): string {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > max) throw new ApiError(400, `${label} invÃ¡lido.`);
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > max) throw new ApiError(400, `${label} inválido.`);
   return value.trim();
 }
 export function email(value: unknown) {
   const result = text(value, 'E-mail', 254).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) throw new ApiError(400, 'E-mail invÃ¡lido.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) throw new ApiError(400, 'E-mail inválido.');
   return result;
 }
 export function identifier(value: unknown) {
   const result = text(value, 'Identificador', 80);
-  if (!/^[a-zA-Z0-9_-]+$/.test(result)) throw new ApiError(400, 'Identificador invÃ¡lido.');
+  if (!/^[a-zA-Z0-9_-]+$/.test(result)) throw new ApiError(400, 'Identificador inválido.');
   return result;
 }
 export function dueDate(value: unknown) {
   const result = text(value, 'Vencimento', 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(result) || !Number.isFinite(Date.parse(result)) || new Date(result).toISOString().slice(0, 10) !== result) throw new ApiError(400, 'Use uma data vÃ¡lida no formato AAAA-MM-DD.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result) || !Number.isFinite(Date.parse(result)) || new Date(result).toISOString().slice(0, 10) !== result) throw new ApiError(400, 'Use uma data válida no formato AAAA-MM-DD.');
   return result;
 }
 export function dueDay(value: unknown) {
@@ -36,11 +36,11 @@ export function dueDay(value: unknown) {
   return value as number;
 }
 export function integer(value: unknown, label: string, minimum = -Number.MAX_SAFE_INTEGER, maximum = Number.MAX_SAFE_INTEGER) {
-  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) throw new ApiError(400, `${label} invÃ¡lido.`);
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) throw new ApiError(400, `${label} inválido.`);
   return value as number;
 }
 export function authorize(account: Account, masterId: string, write = false) {
-  if (!account.active || account.masterId !== masterId || (write && account.role !== 'master')) throw new ApiError(403, 'Acesso nÃ£o permitido.');
+  if (!account.active || account.masterId !== masterId || (write && account.role !== 'master')) throw new ApiError(403, 'Acesso não permitido.');
 }
 export function documentKey(masterId: string, cardId: string, date: string, id: string) {
   return `masters/${identifier(masterId)}/cards/${identifier(cardId)}/due/${dueDate(date)}/${identifier(id)}.pdf`;
@@ -71,15 +71,15 @@ export function publicAccount(account: Account) {
 export const MAX_PDF = 15 * 1024 * 1024;
 export const MAX_AVATAR = 2 * 1024 * 1024;
 export function validatePdf(bytes: Uint8Array) {
-  if (bytes.length < 5 || bytes.length > MAX_PDF || Buffer.from(bytes.subarray(0, 5)).toString() !== '%PDF-') throw new ApiError(400, 'Envie um PDF de atÃ© 15 MB.');
+  if (bytes.length < 5 || bytes.length > MAX_PDF || Buffer.from(bytes.subarray(0, 5)).toString() !== '%PDF-') throw new ApiError(400, 'Envie um PDF de até 15 MB.');
 }
 export function validateAvatar(bytes: Uint8Array, requestedType: string | null): AvatarContentType {
-  if (bytes.length < 12 || bytes.length > MAX_AVATAR) throw new ApiError(400, 'Envie uma foto de atÃ© 2 MB.');
+  if (bytes.length < 12 || bytes.length > MAX_AVATAR) throw new ApiError(400, 'Envie uma foto de até 2 MB.');
   const header = Buffer.from(bytes.subarray(0, 12));
   const detected: AvatarContentType | undefined = header.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])) ? 'image/jpeg'
     : header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? 'image/png'
     : header.subarray(0, 4).toString() === 'RIFF' && header.subarray(8, 12).toString() === 'WEBP' ? 'image/webp' : undefined;
   const declared = requestedType?.split(';', 1)[0].trim().toLowerCase();
-  if (!detected || declared !== detected) throw new ApiError(400, 'Use uma imagem JPEG, PNG ou WebP vÃ¡lida.');
+  if (!detected || declared !== detected) throw new ApiError(400, 'Use uma imagem JPEG, PNG ou WebP válida.');
   return detected;
 }

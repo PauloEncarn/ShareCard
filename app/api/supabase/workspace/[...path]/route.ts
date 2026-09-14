@@ -8,7 +8,7 @@ const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosnif
 const tokenFrom = (request: Request) => request.headers.get('cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith('sharecard_session='))?.slice('sharecard_session='.length) || '';
 async function json(request: Request) {
   const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new IdentityError(400, 'JSON invÃ¡lido.');
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new IdentityError(400, 'JSON inválido.');
   return body as Record<string, unknown>;
 }
 async function handle(request: Request, context: Context) {
@@ -21,7 +21,7 @@ async function handle(request: Request, context: Context) {
     if (request.method === 'GET' && path === 'documents') return Response.json(await documents(account), { headers });
     if (request.method === 'GET' && path === 'workspace') return Response.json(await workspace(account), { headers });
     if (request.method === 'GET' && path.startsWith('documents/')) return Response.redirect(await documentUrl(account, path.slice('documents/'.length)), 302);
-    if (request.method !== 'POST') throw new IdentityError(404, 'Rota nÃ£o encontrada.');
+    if (request.method !== 'POST') throw new IdentityError(404, 'Rota não encontrada.');
     if (path === 'documents') {
       const cardId = new URL(request.url).searchParams.get('cardId');
       const date = new URL(request.url).searchParams.get('dueDate');
@@ -36,9 +36,9 @@ async function handle(request: Request, context: Context) {
     if (path.startsWith('people/')) return Response.json(await savePerson(account, body, path.slice('people/'.length)), { headers });
     if (path === 'invites') return Response.json(await invite(account, body.email), { status: 201, headers });
     if (path === 'members/revoke') return Response.json(await revokeMember(account, body.userId), { headers });
-    throw new IdentityError(404, 'Rota nÃ£o encontrada.');
+    throw new IdentityError(404, 'Rota não encontrada.');
   } catch (error) {
-    return Response.json({ error: error instanceof IdentityError ? error.message : 'ServiÃ§o de espaÃ§o indisponÃ­vel.' }, { status: error instanceof IdentityError ? error.status : 503, headers });
+    return Response.json({ error: error instanceof IdentityError ? error.message : 'Serviço de espaço indisponível.' }, { status: error instanceof IdentityError ? error.status : 503, headers });
   }
 }
 export const GET = handle;
