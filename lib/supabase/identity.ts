@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createSupabaseAdminClient } from './admin';
 import { createSupabasePublicClient } from './client';
 
@@ -12,6 +13,7 @@ export type SupabaseAccount = {
 };
 
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
+type InvitationRow = { id: string; master_id: string; email: string; expires_at: string; used_at: string | null };
 
 const validEmail = (value: unknown) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const requiredText = (value: unknown, label: string, max: number) => {
@@ -32,9 +34,7 @@ export class IdentityError extends Error {
 
 function registrationError(message?: string) {
   const normalized = (message || '').toLowerCase();
-  if (normalized.includes('already registered') || normalized.includes('already been registered') || normalized.includes('already exists')) {
-    return new IdentityError(409, 'Este e-mail já possui uma conta. Entre ou use outro e-mail.');
-  }
+  if (normalized.includes('already registered') || normalized.includes('already been registered') || normalized.includes('already exists')) return new IdentityError(409, 'Este e-mail já possui uma conta. Entre ou use outro e-mail.');
   if (normalized.includes('password')) return new IdentityError(400, 'Use uma senha entre 6 e 128 caracteres.');
   if (normalized.includes('signup') || normalized.includes('sign up')) return new IdentityError(403, 'O cadastro por e-mail está desativado no Supabase. Ative-o em Authentication > Providers > Email.');
   if (normalized.includes('not allowed') || normalized.includes('unauthorized') || normalized.includes('api key')) return new IdentityError(503, 'A chave de serviço do Supabase não está válida no ambiente de produção.');
@@ -44,11 +44,21 @@ function registrationError(message?: string) {
 }
 
 export async function registerMaster(input: Record<string, unknown>) {
-  if (input.inviteToken) throw new IdentityError(400, 'O cadastro por convite será liberado na próxima etapa.');
   const name = requiredText(input.name, 'Nome', 80);
   if (!validEmail(input.email)) throw new IdentityError(400, 'Informe um e-mail válido.');
   const email = (input.email as string).trim().toLowerCase();
   const admin = createSupabaseAdminClient();
+  const inviteToken = typeof input.inviteToken === 'string' && input.inviteToken.trim() ? requiredText(input.inviteToken, 'Convite', 128) : null;
+  let invitation: InvitationRow | null = null;
+
+  if (inviteToken) {
+    const tokenHash = createHash('sha256').update(inviteToken).digest('hex');
+    const found = await admin.from('invitations').select('id, master_id, email, expires_at, used_at').eq('token_hash', tokenHash).maybeSingle<InvitationRow>();
+    invitation = found.data || null;
+    if (found.error || !invitation || invitation.used_at || new Date(invitation.expires_at).getTime() <= Date.now()) throw new IdentityError(400, 'Convite inválido, utilizado ou expirado.');
+    if (invitation.email.toLowerCase() !== email) throw new IdentityError(400, 'Use o mesmo e-mail que recebeu o convite.');
+  }
+
   const created = await admin.auth.admin.createUser({ email, password: password(input.password), email_confirm: true });
   if (created.error || !created.data.user) {
     console.error('ShareCard registration failed', { message: created.error?.message, status: created.error?.status, code: created.error?.code });
@@ -56,11 +66,23 @@ export async function registerMaster(input: Record<string, unknown>) {
   }
 
   const user = created.data.user;
-  const inserted = await admin.from('profiles').insert({ id: user.id, master_id: user.id, role: 'master', name }).select('id, master_id, role, name, active').single<ProfileRow>();
+  const inserted = await admin.from('profiles').insert({ id: user.id, master_id: invitation?.master_id || user.id, role: invitation ? 'buyer' : 'master', name }).select('id, master_id, role, name, active').single<ProfileRow>();
   if (inserted.error || !inserted.data) {
     await admin.auth.admin.deleteUser(user.id);
     throw new IdentityError(503, 'A conta foi criada, mas o espaço não pôde ser preparado. Tente novamente.');
   }
+
+  if (invitation) {
+    const claimed = await admin.from('invitations').update({ used_at: new Date().toISOString() }).eq('id', invitation.id).is('used_at', null).gt('expires_at', new Date().toISOString()).select('id').maybeSingle();
+    if (claimed.error || !claimed.data) {
+      await admin.auth.admin.deleteUser(user.id);
+      throw new IdentityError(400, 'Este convite já foi utilizado ou expirou. Peça um novo convite ao master.');
+    }
+    const unlinked = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
+    if (unlinked.data) await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', unlinked.data.id);
+    else await admin.from('people').insert({ master_id: invitation.master_id, account_id: user.id, name, color: '#2563EB' });
+  }
+
   return signIn(email, input.password);
 }
 
