@@ -37,7 +37,7 @@ export default function CloudWorkspace({ embedded = false }: { embedded?: boolea
       const linkToken = new URLSearchParams(window.location.search).get('invite');
       const payload = { name: form.get('name'), email: form.get('email'), password: form.get('password'), ...((form.get('inviteToken') || linkToken) ? { inviteToken: form.get('inviteToken') || linkToken } : {}) };
       if (mode === 'register') await api<Account>('register', json(payload));
-      const result = await api<{account: Account}>('login', json(payload)); setAccount(result.account); await refresh(result.account); if (embedded) window.location.assign('/organizador');
+      const result = await api<{account: Account}>('login', json(payload)); setAccount(result.account); await refresh(result.account); window.location.assign('/organizador');
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createCard(event: FormEvent<HTMLFormElement>) {
@@ -46,7 +46,7 @@ export default function CloudWorkspace({ embedded = false }: { embedded?: boolea
   }
   async function createInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
-    try { const result = await api<{token:string}>('invites', json({ email: form.get('email') })); setInvite(`${window.location.origin}/organizador?view=account&invite=${result.token}`); setNotice('Link de convite criado. Copie e envie à pessoa.'); event.currentTarget.reset(); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
+    try { const result = await api<{token:string}>('invites', json({ email: form.get('email') })); setInvite(`${window.location.origin}/acesso?invite=${result.token}`); setNotice('Link de convite criado. Copie e envie à pessoa.'); event.currentTarget.reset(); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function upload(file?: File, cardId?: string, dueDate?: string) {
     if (!file || !cardId || !dueDate) return; setBusy(true); setError('');
@@ -62,10 +62,7 @@ export default function CloudWorkspace({ embedded = false }: { embedded?: boolea
   }
   async function logout() { await api('logout', json({})).catch(() => {}); setAccount(null); setCards([]); setDocuments([]); setMembers([]); }
   if (loading) return <section className={embedded ? "account-embedded-loading" : "cloud-loading"}><Cloud/><span>Conectando ao seu espaço…</span></section>;
-  if (!account && embedded) return <section className="embedded-auth panel" aria-label="Acesso à conta">
-    <div className="embedded-auth-copy"><span className="eyebrow">ACESSO AO ESPAÇO</span><h2>{mode === 'login' ? 'Entre no seu espaço.' : 'Crie seu espaço compartilhado.'}</h2><p>{mode === 'login' ? 'Acesse cartões, faturas e divisões do seu grupo.' : 'Comece organizando seus cartões e convide quem compartilha as compras.'}</p></div>
-    <div className="embedded-auth-form"><div className="auth-tabs" role="tablist" aria-label="Acesso à conta"><button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }}>Entrar</button><button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></div><form onSubmit={authenticate}>{mode === 'register' && <label>Seu nome<input name="name" required maxLength={100} autoComplete="name" placeholder="Seu nome completo"/></label>}<label>E-mail<input name="email" type="email" required autoComplete="email" placeholder="seu@email.com"/></label><label>Senha<input name="password" type="password" minLength={6} maxLength={128} required autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? 'Digite sua senha' : 'Crie uma senha segura'}/><small>Use pelo menos 6 caracteres.</small></label>{mode === 'register' && <label>Código de convite <span>opcional</span><input name="inviteToken" maxLength={64} placeholder="Cole seu código"/><small>Sem código, você cria um espaço master.</small></label>}{error && <p className="cloud-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={busy}>{busy ? 'Aguarde…' : mode === 'login' ? <>Entrar <ArrowRight/></> : <>Criar conta <ArrowRight/></>}</button></form></div>
-  </section>;
+  if (!account && embedded) return <section className="account-auth-required panel"><span className="eyebrow">ACESSO NECESSÁRIO</span><h2>Entre para abrir seu espaço.</h2><p>Cartões, faturas e compradores ficam disponíveis após o login.</p><a className="button primary" href="/acesso">Entrar ou criar conta <ArrowRight/></a></section>;
   if (!account) return <main className="auth-shell auth-experience">
     <div className="auth-orbit auth-orbit-blue"/><div className="auth-orbit auth-orbit-teal"/><div className="auth-orbit auth-orbit-purple"/>
     <section className="auth-story">
