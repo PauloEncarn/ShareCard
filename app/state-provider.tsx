@@ -26,6 +26,10 @@ export function StateProvider({ children }: { children: ReactNode }) {
   const version = useRef(0);
   const hydrated = useRef(false);
   const savedState = useRef('');
+  const latestState = useRef(state);
+  const saving = useRef(false);
+  const [persistTick, setPersistTick] = useState(0);
+  latestState.current = state;
 
   const applyWorkspace = useCallback((payload: { state: unknown; version: number }) => {
     const restored = payload.state ? validateBackup(payload.state) : emptyState;
@@ -121,37 +125,43 @@ export function StateProvider({ children }: { children: ReactNode }) {
     if (serialized === savedState.current) return;
 
     const timer = window.setTimeout(async () => {
+      if (saving.current) return;
+      saving.current = true;
+      const snapshot = latestState.current;
+      const snapshotSerialized = JSON.stringify(snapshot);
       try {
         const response = await fetch(workspaceEndpoint, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state, version: version.current }),
+          body: JSON.stringify({ state: snapshot, version: version.current }),
         });
         const saved = await response.json().catch(() => null) as { version?: number; error?: string } | null;
         if (!response.ok) {
           if (response.status === 409) {
             try {
               await refreshWorkspace();
-              setStorageError('Outra pessoa alterou a organização. A versão mais recente foi carregada; revise a alteração antes de continuar.');
+              setStorageError('A organização foi atualizada em outro dispositivo. A versão mais recente foi carregada.');
             } catch {
-              setStorageError('Outra pessoa alterou a organização. Atualize a página para carregar a versão mais recente.');
+              setStorageError('A organização foi atualizada em outro dispositivo. Atualize a página para continuar.');
             }
             return;
           }
           throw new Error(saved?.error || 'Não foi possível salvar a organização.');
         }
-
         if (typeof saved?.version !== 'number') throw new Error('Não foi possível confirmar o salvamento.');
         version.current = saved.version;
-        savedState.current = serialized;
+        savedState.current = snapshotSerialized;
       } catch (error) {
         setStorageError(error instanceof Error ? error.message : 'Não foi possível salvar a organização.');
+      } finally {
+        saving.current = false;
+        if (JSON.stringify(latestState.current) !== savedState.current) setPersistTick(value => value + 1);
       }
     }, 650);
 
     return () => window.clearTimeout(timer);
-  }, [state, ready, remote, storageError, refreshWorkspace]);
+  }, [state, ready, remote, storageError, refreshWorkspace, persistTick]);
 
   return <Context.Provider value={{ state, setState, ready, storageError, setStorageError, refreshWorkspace }}>{children}</Context.Provider>;
 }
