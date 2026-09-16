@@ -4,6 +4,8 @@ export type Transaction = {
   category: string; installment?: { current: number; total: number };
   nextCents?: number; kind: 'purchase' | 'service'; allocations: Allocation[];
   carryForward: boolean;
+  /** Division copied from a recognized installment in a previous statement. */
+  inheritedFromPrevious?: boolean;
   note?: string;
   buyerId?: string | null;
   sharedCost?: boolean;
@@ -65,6 +67,7 @@ export function forecast(statement: Statement, personId?: string) {
   });
 }
 const normal = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+const dayOfMonth = (date: string) => date.split('/')[0];
 export function carryAssignments(incoming: Statement, previous: Statement[]): Statement {
   const currentMonth = Number(incoming.dueDate.slice(0, 4)) * 12 + Number(incoming.dueDate.slice(5, 7));
   return { ...incoming, transactions: incoming.transactions.map(t => {
@@ -72,8 +75,8 @@ export function carryAssignments(incoming: Statement, previous: Statement[]): St
     for (const prior of [...previous].sort((a, b) => b.dueDate.localeCompare(a.dueDate))) {
       const months = currentMonth - (Number(prior.dueDate.slice(0, 4)) * 12 + Number(prior.dueDate.slice(5, 7)));
       if (months <= 0) continue;
-      const candidates = prior.transactions.filter(p => p.carryForward && p.installment && p.date === t.date && normal(p.merchant) === normal(t.merchant) && normal(p.holder) === normal(t.holder) && p.installment.total === t.installment!.total && p.installment.current + months === t.installment!.current);
-      if (candidates.length === 1) return { ...t, allocations: scaleAllocations(candidates[0], t.cents), buyerId: candidates[0].buyerId, note: candidates[0].note, sharedCost: candidates[0].sharedCost, carryForward: true };
+      const candidates = prior.transactions.filter(p => p.carryForward && p.installment && dayOfMonth(p.date) === dayOfMonth(t.date) && normal(p.merchant) === normal(t.merchant) && normal(p.holder) === normal(t.holder) && p.installment.total === t.installment!.total && p.installment.current + months === t.installment!.current);
+      if (candidates.length === 1) return { ...t, allocations: scaleAllocations(candidates[0], t.cents), buyerId: candidates[0].buyerId, note: candidates[0].note, sharedCost: candidates[0].sharedCost, carryForward: true, inheritedFromPrevious: true };
     }
     return t;
   }) };
