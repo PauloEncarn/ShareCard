@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createSupabaseAdminClient } from './admin';
 import { IdentityError, type SupabaseAccount } from './identity';
+import { syncWorkspaceTransactions } from './transaction-sync';
 
 type CardRow = { id: string; master_id: string; name: string; due_day: number; issuer?: string; last4?: string | null; created_at: string };
 type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
@@ -246,10 +247,12 @@ export async function saveWorkspace(account: SupabaseAccount, input: Record<stri
     const insert = await admin.from('workspaces').insert({ master_id: account.masterId, state: input.state, version: 1, updated_at: updatedAt }).select('state, version, updated_at').maybeSingle();
     if (insert.error?.code === '23505') throw new IdentityError(409, 'A organização foi alterada. Atualize a tela.');
     if (insert.error || !insert.data) throw new IdentityError(503, 'Não foi possível salvar a organização.');
+    await syncWorkspaceTransactions(admin, account.masterId, input.state);
     return insert.data;
   }
   const update = await admin.from('workspaces').update({ state: input.state, version: expected + 1, updated_at: updatedAt }).eq('master_id', account.masterId).eq('version', expected).select('state, version, updated_at').maybeSingle();
   if (update.error) throw new IdentityError(503, 'Não foi possível salvar a organização.');
   if (!update.data) throw new IdentityError(409, 'A organização foi alterada. Atualize a tela.');
+  await syncWorkspaceTransactions(admin, account.masterId, input.state);
   return update.data;
 }
