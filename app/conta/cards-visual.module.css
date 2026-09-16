@@ -1,0 +1,44 @@
+.cardsSection :global(.visual-card-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px;
+}
+
+.cardsSection :global(.visual-credit-card) {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 156px;
+  padding: 20px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgb(15 23 42 / 16%);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.cardsSection :global(.visual-credit-card:focus-visible) { outline: 3px solid #14b8a6; outline-offset: 3px; }
+.cardsSection :global(.visual-credit-card:hover) { transform: translateY(-4px); box-shadow: 0 24px 42px rgb(15 23 42 / 24%); }
+.cardsSection :global(.visual-credit-card::before) { content: 'VERSO DO CARTÃO'; position: absolute; inset: 0; display: grid; place-items: center; background: #0f172a; color: #fff; font-size: .7rem; font-weight: 800; letter-spacing: .16em; opacity: 0; transition: opacity 180ms ease; pointer-events: none; }
+.cardsSection :global(.visual-credit-card:hover::before) { opacity: 1; }
+.cardsSection :global(.visual-credit-card.itau) { background: linear-gradient(135deg, #ec4d09, #ff8a19); }
+.cardsSection :global(.visual-credit-card.nubank) { background: linear-gradient(135deg, #5c139f, #9e4df1); }
+.cardsSection :global(.visual-credit-card.caixa) { background: linear-gradient(135deg, #0758a6, #1b9eea); }
+.cardsSection :global(.visual-card-bank), .cardsSection :global(.visual-card-number), .cardsSection :global(.visual-card-due) { position: relative; z-index: 1; display: block; }
+.cardsSection :global(.visual-card-bank) { font-size: 1.1rem; font-weight: 800; }
+.cardsSection :global(.visual-card-chip) { position: relative; z-index: 1; display: block; width: 34px; height: 24px; margin: 26px 0 15px; border-radius: 5px; background: linear-gradient(135deg, #f8fafc, #94a3b8); }
+.cardsSection :global(.visual-card-number) { font-size: .76rem; letter-spacing: 1px; }
+.cardsSection :global(.visual-card-due) { margin-top: 12px; font-size: .64rem; letter-spacing: .12em; }
+
+.cardBackdrop { position: fixed; z-index: 100; inset: 0; border: 0; background: rgb(15 23 42 / 48%); backdrop-filter: blur(8px); cursor: default; }
+.cardsSection :global(.selected-card-detail) { position: fixed; z-index: 101; left: 50%; top: 50%; width: min(680px, calc(100vw - 32px)); max-height: min(82vh, 720px); overflow: auto; transform: translate(-50%, -50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 30px; border-radius: 20px; background: #fff; box-shadow: 0 28px 70px rgb(15 23 42 / 34%); }
+.cardsSection :global(.selected-card-close) { border: 0; background: transparent; color: #2563eb; font: inherit; font-weight: 800; cursor: pointer; }
+.cardsSection :global(.selected-card-buyers) { display: flex; flex-wrap: wrap; gap: 10px; }
+.cardsSection :global(.selected-card-buyers > div) { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; border: 1px solid #e2e8f0; border-radius: 999px; }
+
+@media (max-width: 640px) { .cardsSection :global(.selected-card-detail) { align-items: flex-start; padding: 24px; } }
+@media (prefers-reduced-motion: reduce) { .cardsSection :global(.visual-credit-card), .cardsSection :global(.visual-credit-card::before) { transition: none; } }
