@@ -53,7 +53,10 @@ export function StateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const me = await fetch(identityEndpoint, { credentials: 'same-origin' });
+        const [me, workspace] = await Promise.all([
+          fetch(identityEndpoint, { credentials: 'same-origin' }),
+          fetch(workspaceEndpoint, { credentials: 'same-origin' }),
+        ]);
         if (me.ok) {
           const account = await me.json() as { role: string };
           if (account.role !== 'master') {
@@ -62,9 +65,8 @@ export function StateProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          const response = await fetch(workspaceEndpoint, { credentials: 'same-origin' });
-          const saved = await response.json().catch(() => null) as { state?: unknown; version?: number; error?: string } | null;
-          if (!response.ok || !saved || typeof saved.version !== 'number') {
+          const saved = await workspace.json().catch(() => null) as { state?: unknown; version?: number; error?: string } | null;
+          if (!workspace.ok || !saved || typeof saved.version !== 'number') {
             throw new Error(saved?.error || 'Não foi possível abrir a organização compartilhada.');
           }
 

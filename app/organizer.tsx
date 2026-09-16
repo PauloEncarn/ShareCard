@@ -82,7 +82,10 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   useEffect(() => {
     const loadCloud = async () => {
       try {
-        const me = await fetch(cloudEndpoint('me'), { credentials: 'same-origin' });
+        const [me, cardsResponse] = await Promise.all([
+          fetch(cloudEndpoint('me'), { credentials: 'same-origin' }),
+          fetch(cloudEndpoint('cards'), { credentials: 'same-origin' }),
+        ]);
         if (!me.ok) return;
         if ((await me.json() as { role: string }).role !== 'master') {
           const response = await fetch(cloudEndpoint('buyer-summary'), { credentials: 'same-origin' });
@@ -90,9 +93,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
           setCloudBuyer(true);
           return;
         }
-        const response = await fetch(cloudEndpoint('cards'), { credentials: 'same-origin' });
-        if (!response.ok) return;
-        const cards = await response.json() as CloudCard[];
+        if (!cardsResponse.ok) return;
+        const cards = await cardsResponse.json() as CloudCard[];
         setCloudMaster(true); setCloudCards(cards); setCloudCardId(cards[0]?.id || '');
       } catch { /* The standalone organizer continues to support an offline draft. */ }
     };
