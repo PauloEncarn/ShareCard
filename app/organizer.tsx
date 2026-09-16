@@ -15,7 +15,8 @@ const dateLabel = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateStrin
 const monthLabel = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('');
 type CloudCard = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null };
-type BuyerSummary = { statement: { dueDate: string | null; totalCents: number | null } | null; personalCents: number; purchaseCount: number; pendingCount: number; purchases?: Array<{ merchant: string; date: string; cents: number; assigned: boolean }> };
+type BuyerSummary = { statement: { dueDate: string | null; totalCents: number | null } | null; personalCents: number; purchaseCount: number; pendingCount: number; status?: 'ready' | 'no_purchases' | 'no_statement' | 'person_not_linked' | 'person_not_in_workspace'; purchases?: Array<{ merchant: string; date: string; cents: number; assigned: boolean }> };
+type CloudPerson = Person & { masterId?: string; version: number };
 const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const cloudBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
 const cloudEndpoint = (path: string) => cloudBackend === 'floci'
@@ -219,16 +220,25 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   function openPerson(person?: Person) {
     setPersonEditing(person ?? null); setPersonName(person?.name ?? ''); setPersonLimit(person?.monthlyLimitCents ? (person.monthlyLimitCents / 100).toFixed(2).replace('.', ',') : ''); setPersonColor(person?.color ?? colors[state.people.length % colors.length]); setFormError(''); setPersonModal(true);
   }
-  function savePerson() {
+  async function savePerson() {
     try {
       const name = personName.trim();
       if (!name || state.people.some(p => p.id !== personEditing?.id && p.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error('Informe um nome diferente dos já cadastrados.');
       const monthlyLimitCents = personLimit.trim() ? parseMoney(personLimit) : undefined;
       if (monthlyLimitCents !== undefined && monthlyLimitCents <= 0) throw new Error('O limite deve ser maior que zero, ou ficar vazio.');
-      const person: Person = { id: personEditing?.id ?? crypto.randomUUID(), name, color: personColor, monthlyLimitCents };
+      setBusy(true);
+      let person: Person = { id: personEditing?.id ?? crypto.randomUUID(), name, color: personColor, monthlyLimitCents, version: personEditing?.version };
+      if (cloudMaster && (!personEditing || personEditing.version)) {
+        const path = personEditing?.version ? `people/${personEditing.id}` : 'people';
+        const response = await fetch(cloudEndpoint(path), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color: personColor, monthlyLimitCents: monthlyLimitCents ?? null, ...(personEditing?.version ? { version: personEditing.version } : {}) }) });
+        const saved = await response.json() as CloudPerson & { error?: string };
+        if (!response.ok) throw new Error(saved.error || 'Não foi possível salvar a pessoa.');
+        person = { id: saved.id, name: saved.name, color: saved.color, monthlyLimitCents: saved.monthlyLimitCents ?? undefined, accountId: saved.accountId, version: saved.version };
+      }
       setState(prev => ({ ...prev, people: personEditing ? prev.people.map(p => p.id === person.id ? person : p) : [...prev.people, person] }));
       setPersonModal(false); setMessage(personEditing ? 'Pessoa atualizada.' : 'Pessoa cadastrada.');
     } catch (e) { setFormError((e as Error).message); }
+    finally { setBusy(false); }
   }
   function openSplit(t: Transaction) {
     if (isSharedCost(t)) { setMessage('Este gasto geral é rateado automaticamente entre os compradores. Altere o tipo na edição para dividir individualmente.'); return; }
@@ -326,6 +336,13 @@ function download(text: string, filename: string, type: string) {
 }
 
 function BuyerPanel({ summary }: { summary: BuyerSummary | null }) {
-  if (!summary?.statement) return <section className="empty-workspace"><span className="pill">SEU ESPAÇO</span><h2>Suas compras aparecerão aqui.</h2><p>Assim que o master importar uma fatura e atribuir compras ao seu perfil, você verá seu resumo nesta tela.</p><a className="button primary" href="/cartoes">Ver cartões e faturas <ArrowRight width={18}/></a></section>;
+  if (!summary?.statement) {
+    const message = summary?.status === 'person_not_in_workspace'
+      ? 'Você foi adicionado como comprador. O master ainda precisa incluir seu perfil na organização desta fatura.'
+      : summary?.status === 'no_statement'
+        ? 'Você foi adicionado como comprador. Ainda não há faturas importadas neste cartão compartilhado.'
+        : 'Você foi adicionado como comprador. Ainda não há compras registradas no seu perfil.';
+    return <section className="empty-workspace"><span className="pill">SEU ESPAÇO</span><h2>Suas compras aparecerão aqui.</h2><p>{message}</p><a className="button primary" href="/cartoes">Ver cartões e faturas <ArrowRight width={18}/></a></section>;
+  }
   return <section className="buyer-overview"><div className="stats-grid"><article className="stat-card main-stat"><div className="stat-label">Sua parte nesta fatura <Wallet width={19}/></div><strong>{money(summary.personalCents)}</strong><div className="stat-foot">Vencimento {summary.statement.dueDate ? dateLabel(summary.statement.dueDate) : 'a confirmar'}</div></article><article className="stat-card"><div className="stat-label">Suas compras <CreditCard width={19}/></div><strong>{summary.purchaseCount}</strong><small>Lançamentos atribuídos ao seu perfil</small></article><article className="stat-card"><div className="stat-label">Para revisar <Settings2 width={19}/></div><strong>{summary.pendingCount}</strong><small>Compras ainda sem confirmação individual</small></article></div><section className="panel transaction-panel"><div className="panel-heading"><div><h2>Suas compras recentes</h2><p>Valores atribuídos a você na fatura atual.</p></div><a className="text-button" href="/cartoes">Ver faturas <ArrowRight width={16}/></a></div><div className="table-scroll"><table><thead><tr><th>ESTABELECIMENTO</th><th>DATA</th><th>SEU VALOR</th><th>STATUS</th></tr></thead><tbody>{summary.purchases?.map(purchase => <tr key={`${purchase.merchant}-${purchase.date}`}><td><strong>{purchase.merchant}</strong></td><td className="muted">{purchase.date || '—'}</td><td className="amount-cell">{money(purchase.cents)}</td><td><span className="verified">{purchase.assigned ? 'Confirmada' : 'Dividida'}</span></td></tr>)}</tbody></table></div></section></section>;
 }

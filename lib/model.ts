@@ -16,7 +16,7 @@ export type Statement = {
   nextTotal?: number; laterTotal?: number; transactions: Transaction[];
   holderTotals: { name: string; cents: number }[]; warnings: string[]; importedAt: string;
 };
-export type Person = { id: string; name: string; color: string; monthlyLimitCents?: number };
+export type Person = { id: string; name: string; color: string; monthlyLimitCents?: number; accountId?: string | null; version?: number };
 export type AppState = { version: 1; people: Person[]; statements: Statement[]; activeId: string | null };
 export const emptyState: AppState = { version: 1, people: [], statements: [], activeId: null };
 export const colors = ['#5263df', '#e18b31', '#149c87', '#c568a1', '#488ec9', '#986bce'];
