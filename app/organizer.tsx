@@ -121,6 +121,14 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     return () => lifecycle.abort();
   }, []);
 
+  const buyerAllowedTab = ['overview', 'cards', 'account'].includes(tab);
+  useEffect(() => {
+    if (cloudBuyer && !buyerAllowedTab) router.replace('/organizador');
+  }, [buyerAllowedTab, cloudBuyer, router]);
+
+  if (cloudBuyer && !buyerAllowedTab) {
+    return <main className="page-content"><section className="empty-workspace"><span className="pill">ACESSO DO COMPRADOR</span><h2>Esta área é do master.</h2><p>Você será levado para a sua visão geral.</p></section></main>;
+  }
   function updateStatement(update: (s: Statement) => Statement) {
     if (!active) return;
     setState(prev => ({ ...prev, statements: prev.statements.map(s => s.id === active.id ? update(s) : s) }));
@@ -284,13 +292,13 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     <aside className="sidebar">
       <a className="brand brand-logo" href="/organizador" aria-label="Visão geral do ShareCard"><img src="/brand/sharecard_symbol.png" alt="ShareCard"/></a>
       <div className="workspace-label">SEU ORGANIZADOR</div>
-      <nav aria-label="Navegação principal">{[{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'transactions', label: 'Lançamentos', icon: CreditCard }, { id: 'people', label: 'Pessoas', icon: Users }, { id: 'cards', label: 'Cartões e grupo', icon: CreditCard }, { id: 'forecast', label: 'Próximas faturas', icon: TrendingUp }, { id: 'account', label: 'Minha conta', icon: Wallet }].map(item => <button key={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}><span className="nav-icon"><item.icon width={20} height={20}/></span><span>{item.label}</span>{tab === item.id && <span className="nav-mark"/>}</button>)}</nav>
+      <nav aria-label="Navegação principal">{(cloudBuyer ? [{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'cards', label: 'Faturas', icon: FileText }, { id: 'account', label: 'Minha conta', icon: Wallet }] : [{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'transactions', label: 'Lançamentos', icon: CreditCard }, { id: 'people', label: 'Pessoas', icon: Users }, { id: 'cards', label: 'Cartões e grupo', icon: CreditCard }, { id: 'forecast', label: 'Próximas faturas', icon: TrendingUp }, { id: 'account', label: 'Minha conta', icon: Wallet }]).map(item => <button key={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}><span className="nav-icon"><item.icon width={20} height={20}/></span><span>{item.label}</span>{tab === item.id && <span className="nav-mark"/>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck width={24} height={24}/><strong>Seu dinheiro.<br/>Sua privacidade.</strong><p>Suas faturas e informações ficam protegidas no seu espaço.</p><span><LockKeyhole width={12} height={12}/> Dados protegidos</span></div>
       <div className="local-user"><span className="user-avatar">EU</span><div>Meu espaço<small>Organize suas faturas</small></div></div>
     </aside>
 
     <main>
-      <header className="topbar"><div className="breadcrumb">Meu espaço <ChevronRight width={14} height={14}/><span>{({ overview: 'Visão geral', transactions: 'Lançamentos', people: 'Pessoas', forecast: 'Próximas faturas', cards: 'Cartões e grupo', account: 'Minha conta' } as Record<string, string>)[tab]}</span></div><span className="private-label"><LockKeyhole width={14} height={14}/> Espaço protegido</span></header>
+      <header className="topbar"><div className="breadcrumb">Meu espaço <ChevronRight width={14} height={14}/><span>{({ overview: 'Visão geral', transactions: 'Lançamentos', people: 'Pessoas', forecast: 'Próximas faturas', cards: cloudBuyer ? 'Faturas' : 'Cartões e grupo', account: 'Minha conta' } as Record<string, string>)[tab]}</span></div><span className="private-label"><LockKeyhole width={14} height={14}/> Espaço protegido</span></header>
       <div className="page-content">
         {storageError && <div className="notice danger" role="alert"><CircleAlert width={18} height={18}/><span>{storageError}</span><button type="button" className="text-button" onClick={() => void refreshWorkspace().catch(error => setFormError(error instanceof Error ? error.message : 'Não foi possível atualizar agora.'))}>Atualizar agora</button></div>}
         <div className="page-heading"><div><div className="eyebrow">MENOS CONTAS NA CABEÇA</div><h1>{tab === 'overview' ? 'Sua fatura, sem mistério.' : tab === 'transactions' ? 'Cada compra no seu lugar.' : tab === 'people' ? 'Tudo dividido, tudo claro.' : tab === 'cards' ? 'Cartões e compradores.' : tab === 'account' ? 'Minha conta.' : 'Olhe os próximos meses.'}</h1><p>{tab === 'overview' ? 'Entenda os gastos, divida as compras e planeje o que vem.' : tab === 'transactions' ? 'Confira os lançamentos e escolha quem fica com cada valor.' : tab === 'people' ? 'Veja quanto cabe a cada pessoa nesta fatura.' : tab === 'cards' ? 'Cadastre os ciclos, convide compradores e acompanhe as faturas do grupo.' : tab === 'account' ? 'Confira seu nome, e-mail, papel no grupo e foto de perfil.' : 'Acompanhe as parcelas que já estão comprometidas.'}</p></div>{tab !== 'account' && tab !== 'cards' && <button className="button primary" disabled={busy || !ready} onClick={() => { setFormError(''); input.current?.click(); }}><Upload width={18} height={18}/>{busy ? 'Lendo fatura…' : 'Importar fatura'}</button>}<input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={e => upload(e.target.files?.[0])}/></div>
