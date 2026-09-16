@@ -1,5 +1,5 @@
 import { accountFromAccessToken, IdentityError } from '@/lib/supabase/identity';
-import { buyerSummary, cards, createCard, deleteCard, documentUrl, documents, invite, members, people, revokeMember, savePerson, saveWorkspace, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
+import { buyerSummary, cards, createCard, deleteCard, deleteDocument, documentUrl, documents, invite, members, people, revokeMember, savePerson, saveWorkspace, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,7 @@ async function handle(request: Request, context: Context) {
     if (request.method === 'GET' && path === 'buyer-summary') return Response.json(await buyerSummary(account), { headers });
     if (request.method === 'GET' && path.startsWith('documents/')) return Response.redirect(await documentUrl(account, path.slice('documents/'.length)), 302);
     if (request.method === 'DELETE' && path.startsWith('cards/')) return Response.json(await deleteCard(account, path.slice('cards/'.length)), { headers });
+    if (request.method === 'DELETE' && path.startsWith('documents/')) return Response.json(await deleteDocument(account, path.slice('documents/'.length)), { headers });
     if (request.method !== 'POST') throw new IdentityError(404, 'Rota nÃƒÂ£o encontrada.');
     if (path === 'documents') {
       const cardId = new URL(request.url).searchParams.get('cardId');

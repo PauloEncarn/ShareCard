@@ -157,6 +157,19 @@ export async function documentUrl(account: SupabaseAccount, rawId: unknown) {
   return signed.data.signedUrl;
 }
 
+export async function deleteDocument(account: SupabaseAccount, rawId: unknown) {
+  masterOnly(account);
+  const id = text(rawId, 'Fatura', 80), admin = createSupabaseAdminClient();
+  const found = await admin.from('statements').select('id, storage_path').eq('id', id).eq('master_id', account.masterId).maybeSingle<{ id: string; storage_path: string }>();
+  if (found.error) throw new IdentityError(503, 'Não foi possível localizar a fatura.');
+  if (!found.data) throw new IdentityError(404, 'Fatura não encontrada. Atualize a tela e tente novamente.');
+  const removed = await admin.from('statements').delete().eq('id', id).eq('master_id', account.masterId);
+  if (removed.error) throw new IdentityError(503, 'Não foi possível excluir a fatura.');
+  const file = await admin.storage.from('statements').remove([found.data.storage_path]);
+  if (file.error) console.error('ShareCard document storage cleanup failed', { statementId: id, message: file.error.message });
+  return { ok: true };
+}
+
 export async function uploadAvatar(account: SupabaseAccount, bytes: Uint8Array, contentType: string | null, rawUserId?: unknown) {
   if (bytes.length < 12 || bytes.length > 2 * 1024 * 1024) throw new IdentityError(400, 'Envie uma foto de atÃ© 2 MB.');
   const type = contentType?.split(';', 1)[0].trim().toLowerCase();
