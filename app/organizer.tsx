@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Download as ArrowDownToLine, NavArrowRight as ArrowRight, Check, DoubleCheck as CheckCheck, NavArrowRight as ChevronRight, Cloud, CreditCard, Page as FileText, Dashboard as LayoutDashboard, Lock as LockKeyhole, Plus, Search, Settings as Settings2, ShieldCheck, Trash as Trash2, StatsUpSquare as TrendingUp, Upload, Group as Users, Wallet, Xmark as X, WarningCircle as CircleAlert, EditPencil as Pencil, Calendar as CalendarDays } from 'iconoir-react';
+import { Download as ArrowDownToLine, NavArrowRight as ArrowRight, Check, DoubleCheck as CheckCheck, NavArrowRight as ChevronRight, Cloud, CreditCard, Page as FileText, Dashboard as LayoutDashboard, Lock as LockKeyhole, Plus, Search, Settings as Settings2, ShieldCheck, Trash as Trash2, StatsUpSquare as TrendingUp, Upload, Group as Users, Wallet, Xmark as X, WarningCircle as CircleAlert, EditPencil as Pencil, Calendar as CalendarDays, LogOut } from 'iconoir-react';
 import { carryAssignments, colors, emptyState, forecast, money, parseMoney, scaleAllocations, splitEqual, sum, unassigned, validateAllocations, type Allocation, type AppState, type Statement, type Transaction } from '@/lib/model';
 import { readStatement } from '@/lib/pdf';
 import '@/lib/webmcp';
@@ -22,6 +22,7 @@ const cloudBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || loca
 const cloudEndpoint = (path: string) => cloudBackend === 'floci'
   ? `/api/backend/${path}`
   : path === 'me' ? '/api/supabase/auth/me' : `/api/supabase/workspace/${path}`;
+const logoutEndpoint = cloudBackend === 'floci' ? '/api/backend/logout' : '/api/supabase/auth/logout';
 const cardLabel = (card: NonNullable<Statement['card']>) => `${card.issuer}${card.last4 ? ` •••• ${card.last4}` : ` · vence dia ${card.dueDay}`}`;
 function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -36,6 +37,12 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const stateRef = useRef(state);
   stateRef.current = state;
   const tab = initialTab;
+  async function logout() {
+    try { await fetch(logoutEndpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } finally {
+      window.sessionStorage.removeItem('sharecard:workspace-stale');
+      window.location.assign('/');
+    }
+  }
   function setTab(next: string) {
     const routes: Record<string, string> = { overview: '/organizador', transactions: '/organizador/lancamentos', people: '/pessoas', cards: '/cartoes', forecast: '/organizador/previsoes', account: '/perfil' };
     router.push(routes[next] || '/organizador');
@@ -296,7 +303,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       <div className="workspace-label">SEU ORGANIZADOR</div>
       <nav aria-label="Navegação principal">{(cloudBuyer ? [{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'cards', label: 'Faturas', icon: FileText }, { id: 'account', label: 'Minha conta', icon: Wallet }] : [{ id: 'overview', label: 'Visão geral', icon: LayoutDashboard }, { id: 'transactions', label: 'Lançamentos', icon: CreditCard }, { id: 'people', label: 'Pessoas', icon: Users }, { id: 'cards', label: 'Cartões e grupo', icon: CreditCard }, { id: 'forecast', label: 'Próximas faturas', icon: TrendingUp }, { id: 'account', label: 'Minha conta', icon: Wallet }]).map(item => <button key={item.id} className={`nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}><span className="nav-icon"><item.icon width={20} height={20}/></span><span>{item.label}</span>{tab === item.id && <span className="nav-mark"/>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck width={24} height={24}/><strong>Seu dinheiro.<br/>Sua privacidade.</strong><p>Suas faturas e informações ficam protegidas no seu espaço.</p><span><LockKeyhole width={12} height={12}/> Dados protegidos</span></div>
-      <div className="local-user"><span className="user-avatar">EU</span><div>Meu espaço<small>Organize suas faturas</small></div></div>
+      <div className="local-user"><span className="user-avatar">EU</span><div>Meu espaço<small>Organize suas faturas</small></div><button type="button" className="icon-button" onClick={() => void logout()} aria-label="Sair do sistema" title="Sair"><LogOut width={18} height={18}/></button></div>
     </aside>
 
     <main>
