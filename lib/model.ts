@@ -10,6 +10,8 @@ export type Transaction = {
 };
 export type Statement = {
   id: string; fingerprint: string; filename: string; dueDate: string; total: number;
+  /** ID do arquivo/registro no armazenamento remoto. */
+  storageDocumentId?: string;
   card?: { issuer: string; last4?: string; dueDay: number };
   nextTotal?: number; laterTotal?: number; transactions: Transaction[];
   holderTotals: { name: string; cents: number }[]; warnings: string[]; importedAt: string;

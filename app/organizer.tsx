@@ -173,6 +173,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   async function confirmImport() {
     if (!candidate || sum(candidate.transactions) !== candidate.total || !candidate.dueDate || !candidate.transactions.length) return;
     if (state.statements.some(s => s.dueDate === candidate.dueDate && s.total === candidate.total && s.id !== 'demo')) { setFormError('Já existe uma fatura com este vencimento e total. Confira o histórico antes de importar novamente.'); return; }
+    let storageDocumentId: string | undefined;
     if (cloudMaster) {
       if (!candidateFile) { setFormError('Selecione o PDF da fatura novamente.'); return; }
       setBusy(true);
@@ -189,8 +190,9 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
         if (!selectedCardId) throw new Error('Não identificamos o cartão. Selecione um cartão antes de importar.');
         if (cloudBackend === 'supabase') {
           const response = await fetch(`${cloudEndpoint('documents')}?cardId=${encodeURIComponent(selectedCardId)}&dueDate=${encodeURIComponent(candidate.dueDate)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf', 'X-ShareCard-Filename': candidateFile.name }, body: candidateFile });
-          const result = await response.json() as { error?: string };
+          const result = await response.json() as { id?: string; error?: string };
           if (!response.ok) throw new Error(result.error || 'Não foi possível salvar a fatura na nuvem.');
+          storageDocumentId = result.id;
         } else {
           const form = new FormData(); form.set('file', candidateFile); form.set('cardId', selectedCardId); form.set('dueDate', candidate.dueDate); form.set('statement', JSON.stringify(candidate));
           const response = await fetch(cloudEndpoint('statements/import'), { method: 'POST', credentials: 'same-origin', body: form });
@@ -200,7 +202,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       } catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível salvar a fatura na nuvem.'); setBusy(false); return; }
       setBusy(false);
     }
-    setState(prev => ({ ...prev, people: prev.statements.length === 1 && prev.statements[0].id === 'demo' ? prev.people.filter(p => !['ana', 'bruno', 'clara'].includes(p.id)) : prev.people, statements: [...prev.statements.filter(s => s.id !== 'demo'), candidate], activeId: candidate.id }));
+    const savedCandidate = storageDocumentId ? { ...candidate, storageDocumentId } : candidate;
+    setState(prev => ({ ...prev, people: prev.statements.length === 1 && prev.statements[0].id === 'demo' ? prev.people.filter(p => !['ana', 'bruno', 'clara'].includes(p.id)) : prev.people, statements: [...prev.statements.filter(s => s.id !== 'demo'), savedCandidate], activeId: savedCandidate.id }));
     setCandidate(null); setCandidateFile(null); setTab('overview'); setSearch(''); setFilter('all'); setCategory('all'); setFormError(''); setMessage(cloudMaster ? 'Fatura salva. Agora você pode dividir as compras.' : 'Fatura importada. Agora você pode dividir as compras.');
   }
   function assign(id: string, personId: string) {

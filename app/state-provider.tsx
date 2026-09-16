@@ -31,6 +31,19 @@ export function StateProvider({ children }: { children: ReactNode }) {
     void load();
   }, []);
   useEffect(() => {
+    const applyRemoteState = (event: Event) => {
+      const detail = (event as CustomEvent<{ state?: unknown; version?: unknown }>).detail;
+      if (!detail || typeof detail.version !== 'number' || !Number.isInteger(detail.version) || detail.version < 1 || !detail.state) return;
+      try {
+        const restored = validateBackup(detail.state);
+        version.current = detail.version; savedState.current = JSON.stringify(restored);
+        setState(restored); setStorageError('');
+      } catch { setStorageError('Não foi possível atualizar a organização após excluir a fatura. Recarregue a página.'); }
+    };
+    window.addEventListener('sharecard:workspace-replaced', applyRemoteState);
+    return () => window.removeEventListener('sharecard:workspace-replaced', applyRemoteState);
+  }, []);
+  useEffect(() => {
     if (!ready || storageError || !hydrated.current) return;
     if (!remote) {
       try { localStorage.setItem('fatura-em-dia:v1', JSON.stringify(state)); }

@@ -78,7 +78,11 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   async function removeDocument(document: Document) {
     if (!confirm(`Excluir a fatura com vencimento em ${date(document.dueDate)}? O PDF será removido do espaço do grupo.`)) return;
     setBusy(true); setError('');
-    try { await api(`documents/${document.id}`, { method: 'DELETE' }); await refresh(account!); setNotice('Fatura excluída. Agora o cartão pode ser removido, se desejar.'); }
+    try {
+      const result = await api<{ workspace?: { state: unknown; version: number } | null }>(`documents/${document.id}`, { method: 'DELETE' });
+      if (result.workspace) window.dispatchEvent(new CustomEvent('sharecard:workspace-replaced', { detail: result.workspace }));
+      await refresh(account!); setNotice('Fatura, lançamentos e projeções vinculados foram excluídos. Agora o cartão pode ser removido, se desejar.');
+    }
     catch (reason) { setError((reason as Error).message); }
     finally { setBusy(false); }
   }

@@ -160,14 +160,31 @@ export async function documentUrl(account: SupabaseAccount, rawId: unknown) {
 export async function deleteDocument(account: SupabaseAccount, rawId: unknown) {
   masterOnly(account);
   const id = text(rawId, 'Fatura', 80), admin = createSupabaseAdminClient();
-  const found = await admin.from('statements').select('id, storage_path').eq('id', id).eq('master_id', account.masterId).maybeSingle<{ id: string; storage_path: string }>();
+  const found = await admin.from('statements').select('id, storage_path, sha256').eq('id', id).eq('master_id', account.masterId).maybeSingle<{ id: string; storage_path: string; sha256: string }>();
   if (found.error) throw new IdentityError(503, 'Não foi possível localizar a fatura.');
   if (!found.data) throw new IdentityError(404, 'Fatura não encontrada. Atualize a tela e tente novamente.');
+  const document = found.data;
+  const savedWorkspace = await admin.from('workspaces').select('state, version').eq('master_id', account.masterId).maybeSingle<{ state: unknown; version: number }>();
+  if (savedWorkspace.error) throw new IdentityError(503, 'Não foi possível atualizar a organização desta fatura.');
+  let syncedState: unknown = null, syncedVersion: number | null = null;
+  if (savedWorkspace.data?.state && typeof savedWorkspace.data.state === 'object' && !Array.isArray(savedWorkspace.data.state)) {
+    const current = savedWorkspace.data.state as { statements?: Array<{ storageDocumentId?: unknown; fingerprint?: unknown }>; activeId?: unknown };
+    const statements = Array.isArray(current.statements) ? current.statements : [];
+    const nextStatements = statements.filter(statement => statement.storageDocumentId !== id && statement.fingerprint !== document.sha256);
+    if (nextStatements.length !== statements.length) {
+      const nextActiveId = nextStatements.some(statement => statement.fingerprint === current.activeId) ? current.activeId : nextStatements[0]?.fingerprint ?? null;
+      const nextState = { ...current, statements: nextStatements, activeId: nextActiveId };
+      const updated = await admin.from('workspaces').update({ state: nextState, version: savedWorkspace.data.version + 1, updated_at: new Date().toISOString() }).eq('master_id', account.masterId).eq('version', savedWorkspace.data.version).select('state, version').maybeSingle<{ state: unknown; version: number }>();
+      if (updated.error) throw new IdentityError(503, 'Não foi possível atualizar a organização desta fatura.');
+      if (!updated.data) throw new IdentityError(409, 'A organização foi alterada por outra pessoa. Atualize a tela e tente novamente.');
+      syncedState = updated.data.state; syncedVersion = updated.data.version;
+    }
+  }
   const removed = await admin.from('statements').delete().eq('id', id).eq('master_id', account.masterId);
   if (removed.error) throw new IdentityError(503, 'Não foi possível excluir a fatura.');
-  const file = await admin.storage.from('statements').remove([found.data.storage_path]);
+  const file = await admin.storage.from('statements').remove([document.storage_path]);
   if (file.error) console.error('ShareCard document storage cleanup failed', { statementId: id, message: file.error.message });
-  return { ok: true };
+  return { ok: true, workspace: syncedVersion === null ? null : { state: syncedState, version: syncedVersion } };
 }
 
 export async function uploadAvatar(account: SupabaseAccount, bytes: Uint8Array, contentType: string | null, rawUserId?: unknown) {
