@@ -28,6 +28,14 @@ const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id,
 const publicMember = (row: ProfileRow, email: string) => ({ id: row.id, masterId: row.master_id, role: row.role, name: row.name, email, active: row.active, avatarUrl: null });
 const publicDocument = (row: StatementRow) => ({ id: row.id, masterId: row.master_id, cardId: row.card_id, dueDate: row.due_date, size: row.size_bytes, sha256: row.sha256, createdAt: row.created_at });
 
+async function syncTransactionsSafely(admin: ReturnType<typeof createSupabaseAdminClient>, masterId: string, state: unknown) {
+  try {
+    await syncWorkspaceTransactions(admin, masterId, state);
+  } catch (error) {
+    console.error('ShareCard transaction sync failed', { masterId, message: error instanceof Error ? error.message : 'unknown error' });
+  }
+}
+
 function masterOnly(account: SupabaseAccount) {
   if (account.role !== 'master' || account.id !== account.masterId) throw new IdentityError(403, 'Acesso permitido somente ao master.');
 }
@@ -247,12 +255,12 @@ export async function saveWorkspace(account: SupabaseAccount, input: Record<stri
     const insert = await admin.from('workspaces').insert({ master_id: account.masterId, state: input.state, version: 1, updated_at: updatedAt }).select('state, version, updated_at').maybeSingle();
     if (insert.error?.code === '23505') throw new IdentityError(409, 'A organização foi alterada. Atualize a tela.');
     if (insert.error || !insert.data) throw new IdentityError(503, 'Não foi possível salvar a organização.');
-    await syncWorkspaceTransactions(admin, account.masterId, input.state);
+    await syncTransactionsSafely(admin, account.masterId, input.state);
     return insert.data;
   }
   const update = await admin.from('workspaces').update({ state: input.state, version: expected + 1, updated_at: updatedAt }).eq('master_id', account.masterId).eq('version', expected).select('state, version, updated_at').maybeSingle();
   if (update.error) throw new IdentityError(503, 'Não foi possível salvar a organização.');
   if (!update.data) throw new IdentityError(409, 'A organização foi alterada. Atualize a tela.');
-  await syncWorkspaceTransactions(admin, account.masterId, input.state);
+  await syncTransactionsSafely(admin, account.masterId, input.state);
   return update.data;
 }
