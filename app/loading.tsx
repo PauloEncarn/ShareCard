@@ -1,0 +1,1 @@
+export default function Loading() { return <main className="system-state" aria-live="polite"><span className="system-spinner"/><strong>Preparando seu espaço…</strong><p>Estamos carregando suas informações com segurança.</p></main>; }

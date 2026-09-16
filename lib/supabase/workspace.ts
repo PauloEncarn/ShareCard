@@ -32,7 +32,6 @@ async function syncTransactionsSafely(admin: ReturnType<typeof createSupabaseAdm
   try {
     await syncWorkspaceTransactions(admin, masterId, state);
   } catch (error) {
-    console.error('ShareCard transaction sync failed', { masterId, message: error instanceof Error ? error.message : 'unknown error' });
   }
 }
 
@@ -192,7 +191,7 @@ export async function deleteDocument(account: SupabaseAccount, rawId: unknown) {
   const removed = await admin.from('statements').delete().eq('id', id).eq('master_id', account.masterId);
   if (removed.error) throw new IdentityError(503, 'Não foi possível excluir a fatura.');
   const file = await admin.storage.from('statements').remove([document.storage_path]);
-  if (file.error) console.error('ShareCard document storage cleanup failed', { statementId: id, message: file.error.message });
+  if (file.error)
   return { ok: true, workspace: syncedVersion === null ? null : { state: syncedState, version: syncedVersion } };
 }
 

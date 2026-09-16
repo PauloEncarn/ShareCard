@@ -61,7 +61,6 @@ export async function registerMaster(input: Record<string, unknown>) {
 
   const created = await admin.auth.admin.createUser({ email, password: password(input.password), email_confirm: true });
   if (created.error || !created.data.user) {
-    console.error('ShareCard registration failed', { message: created.error?.message, status: created.error?.status, code: created.error?.code });
     throw registrationError(created.error?.message);
   }
 
