@@ -4,7 +4,7 @@ import { IdentityError, type SupabaseAccount } from './identity';
 import { syncWorkspaceTransactions } from './transaction-sync';
 
 type CardRow = { id: string; master_id: string; name: string; due_day: number; issuer?: string; last4?: string | null; created_at: string };
-type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; email?: string | null; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
+type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; email?: string | null; phone?: string | null; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
 type StatementRow = { id: string; master_id: string; card_id: string; due_date: string; filename: string; storage_path: string; sha256: string; size_bytes: number; created_at: string };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -24,7 +24,7 @@ const cents = (value: unknown) => {
 };
 const publicCard = (row: CardRow) => ({ id: row.id, masterId: row.master_id, name: row.name, dueDay: row.due_day, issuer: row.issuer || 'Itaú', last4: row.last4 ?? null, createdAt: row.created_at });
 const cardIdentityUnavailable = (error: { code?: string; message?: string } | null) => !!error && (error.code === '42703' || error.code === 'PGRST204' || /\b(issuer|last4)\b/i.test(error.message || ''));
-const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id, accountId: row.account_id, name: row.name, email: row.email ?? null, color: row.color, monthlyLimitCents: row.monthly_limit_cents, version: row.version, createdAt: row.created_at, updatedAt: row.updated_at });
+const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id, accountId: row.account_id, name: row.name, email: row.email ?? null, phone: row.phone ?? null, color: row.color, monthlyLimitCents: row.monthly_limit_cents, version: row.version, createdAt: row.created_at, updatedAt: row.updated_at });
 const publicMember = (row: ProfileRow, email: string) => ({ id: row.id, masterId: row.master_id, role: row.role, name: row.name, email, active: row.active, avatarUrl: null });
 const publicDocument = (row: StatementRow) => ({ id: row.id, masterId: row.master_id, cardId: row.card_id, dueDate: row.due_date, size: row.size_bytes, sha256: row.sha256, createdAt: row.created_at });
 
@@ -68,7 +68,7 @@ export async function deleteCard(account: SupabaseAccount, rawId: unknown) {
   return { ok: true };
 }
 export async function people(account: SupabaseAccount) {
-  const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
+  const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, email, phone, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar as pessoas.');
   const rows = result.data || [];
   return (account.role === 'master' ? rows : rows.filter(row => row.account_id === account.id)).map(publicPerson);
@@ -84,7 +84,8 @@ export async function savePerson(account: SupabaseAccount, input: Record<string,
   }
   const email = input.email === undefined || input.email === null || input.email === '' ? null : text(input.email, 'E-mail', 254).toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new IdentityError(400, 'E-mail inválido.');
-  const value = { master_id: account.masterId, account_id: accountId, name: text(input.name, 'Nome', 80), email, color: typeof input.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : '#2563EB', monthly_limit_cents: cents(input.monthlyLimitCents), updated_at: new Date().toISOString() };
+  const phone = input.phone === undefined || input.phone === null || input.phone === '' ? null : text(input.phone, 'Telefone', 30);
+  const value = { master_id: account.masterId, account_id: accountId, name: text(input.name, 'Nome', 80), email, phone, color: typeof input.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : '#2563EB', monthly_limit_cents: cents(input.monthlyLimitCents), updated_at: new Date().toISOString() };
   if (!id) {
     const inserted = await admin.from('people').insert(value).select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').single<PersonRow>();
     if (inserted.error || !inserted.data) throw new IdentityError(503, 'Não foi possível criar a pessoa.');
