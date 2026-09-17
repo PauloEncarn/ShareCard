@@ -40,5 +40,11 @@
 .cardsSection :global(.selected-card-buyers) { display: flex; flex-wrap: wrap; gap: 10px; }
 .cardsSection :global(.selected-card-buyers > div) { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; border: 1px solid #e2e8f0; border-radius: 999px; }
 
-@media (max-width: 640px) { .cardsSection :global(.selected-card-detail) { align-items: flex-start; padding: 24px; } }
+@media (max-width: 640px) {
+  .cardsSection :global(.visual-card-grid) { grid-template-columns:1fr; gap:14px; }
+  .cardsSection :global(.visual-credit-card) { min-height:168px; padding:20px; }
+  .cardsSection :global(.selected-card-detail) { top:auto; bottom:0; width:100%; max-height:82vh; transform:translateX(-50%); align-items:flex-start; padding:24px 18px max(24px, env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; }
+  .cardsSection :global(.selected-card-close) { min-height:44px; padding:8px 0; }
+  .cardsSection :global(.selected-card-buyers) { width:100%; }
+}
 @media (prefers-reduced-motion: reduce) { .cardsSection :global(.visual-credit-card), .cardsSection :global(.visual-credit-card::before) { transition: none; } }

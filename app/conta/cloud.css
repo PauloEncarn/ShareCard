@@ -26,3 +26,29 @@
 
 .account-embedded-loading{min-height:124px;display:flex;align-items:center;justify-content:center}.account-embedded-loading span{width:28px;height:28px;border:3px solid #dbeafe;border-top-color:#2563eb;border-radius:50%;animation:sharecard-spin .7s linear infinite}@keyframes sharecard-spin{to{transform:rotate(360deg)}}.account-profile .master-tools,.account-profile .cycle-section,.account-profile .upload-band,.account-profile .document-section,.account-profile .member-section{display:none}.profile-details{display:flex;justify-content:space-between;gap:28px;padding:28px;margin-top:2px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.profile-details h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.04em;margin:7px 0 4px}.profile-details p{color:#64748b}.profile-details dl{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:18px;margin:0}.profile-details dt{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}.profile-details dd{margin:4px 0 0;font-size:.86rem;font-weight:700;color:#334155}@media(max-width:720px){.profile-details{display:grid;padding:22px;gap:22px}.profile-details dl{grid-template-columns:1fr}}
 .document-delete{justify-self:end;color:#dc2626!important;font-size:.78rem}
+
+/* Mobile comfort: full-height actions, shorter lists and no horizontal pressure. */
+@media (max-width: 800px) {
+  .cloud-top > button, .profile-photo-button { min-width:44px; min-height:44px; justify-content:center; }
+  .cloud-nav a { min-height:44px; display:grid; place-items:center; }
+  .master-tools button, .upload-band button { min-height:48px; width:100%; }
+  .upload-band { padding:18px; gap:14px; }
+  .document-list article { grid-template-columns:48px minmax(0, 1fr); gap:12px; padding:15px 14px; }
+  .document-list > article > svg { display:none; }
+  .document-date { grid-row:1 / 4; }
+  .document-list a, .document-list .document-delete { grid-column:2; min-height:44px; }
+  .document-list a { padding:8px 0 0; }
+  .document-list .document-delete { justify-self:start; padding:8px 0; }
+  .member-list > div { grid-template-columns:38px minmax(0, 1fr); padding:13px 14px; }
+  .member-list > div button { grid-column:2; justify-self:start; min-height:40px; padding:8px 0; }
+}
+
+@media (max-width: 480px) {
+  .cloud-brand img { width:132px; }
+  .cloud-content { padding:24px 14px 44px; }
+  .cloud-title h1 { font-size:2rem; }
+  .cloud-title p { font-size:.9rem; }
+  .section-line h2 { font-size:1.2rem; }
+  .section-line > strong { font-size:1.65rem; }
+  .master-tools > section { padding:16px; }
+}
