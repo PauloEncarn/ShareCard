@@ -39,6 +39,12 @@
 .cardsSection :global(.selected-card-close) { border: 0; background: transparent; color: #2563eb; font: inherit; font-weight: 800; cursor: pointer; }
 .cardsSection :global(.selected-card-buyers) { display: flex; flex-wrap: wrap; gap: 10px; }
 .cardsSection :global(.selected-card-buyers > div) { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; border: 1px solid #e2e8f0; border-radius: 999px; }
+.cardsSection :global(.selected-card-purchases) { width:100%; border-top:1px solid #e2e8f0; padding-top:18px; }
+.cardsSection :global(.selected-card-purchases > strong) { display:block; margin-bottom:9px; color:#0f172a; }
+.cardsSection :global(.selected-card-purchases ul) { list-style:none; margin:0; padding:0; }
+.cardsSection :global(.selected-card-purchases li) { display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-top:1px solid #f1f5f9; font-size:.88rem; }
+.cardsSection :global(.selected-card-purchases li span), .cardsSection :global(.selected-card-purchases small) { display:block; }
+.cardsSection :global(.selected-card-purchases small) { margin-top:2px; color:#64748b; font-size:.75rem; }
 
 @media (max-width: 640px) {
   .cardsSection :global(.visual-card-grid) { grid-template-columns:1fr; gap:14px; }
