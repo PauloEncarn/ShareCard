@@ -10,8 +10,17 @@ type Document = { id: string; cardId: string; dueDate: string; size: number; cre
 type WorkspaceCache = { account: Account; cards: Card[]; documents: Document[]; members: Account[]; managementLoaded: boolean; updatedAt: number };
 const CACHE_TTL_MS = 45_000;
 let workspaceCache: WorkspaceCache | null = null;
+const workspaceAccountKey = 'sharecard:workspace-account-id';
+const clearClientWorkspace = () => {
+  workspaceCache = null;
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem('sharecard:workspace-stale');
+  window.sessionStorage.removeItem(workspaceAccountKey);
+  window.localStorage.removeItem('fatura-em-dia:v1');
+};
 const cachedWorkspace = (section: 'profile' | 'management') => {
   if (typeof window !== 'undefined' && window.sessionStorage.getItem('sharecard:workspace-stale') === '1') return null;
+  if (typeof window !== 'undefined' && workspaceCache && window.sessionStorage.getItem(workspaceAccountKey) !== workspaceCache.account.id) return null;
   if (!workspaceCache || Date.now() - workspaceCache.updatedAt > CACHE_TTL_MS) return null;
   return section === 'profile' || workspaceCache.managementLoaded ? workspaceCache : null;
 };
@@ -36,11 +45,13 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   const refresh = useCallback(async (current: Account) => {
     if (section === 'profile') {
       workspaceCache = { ...(workspaceCache ?? { cards: [], documents: [], members: [], managementLoaded: false }), account: current, updatedAt: Date.now() };
+      window.sessionStorage.setItem(workspaceAccountKey, current.id);
       return;
     }
     const [nextCards, nextDocuments, nextMembers] = await Promise.all([api<Card[]>('cards'), api<Document[]>('documents'), current.role === 'master' ? api<Account[]>('members') : Promise.resolve([])]);
     setCards(nextCards); setDocuments(nextDocuments); setMembers(nextMembers);
     workspaceCache = { account: current, cards: nextCards, documents: nextDocuments, members: nextMembers, managementLoaded: true, updatedAt: Date.now() };
+    window.sessionStorage.setItem(workspaceAccountKey, current.id);
     window.sessionStorage.removeItem('sharecard:workspace-stale');
   }, [section]);
   useEffect(() => {
@@ -49,7 +60,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     api<Account>('me').then(async current => {
       if (!embedded) { window.location.replace('/organizador'); return; }
       setAccount(current); await refresh(current);
-    }).catch(() => { workspaceCache = null; }).finally(() => setLoading(false));
+    }).catch(() => { clearClientWorkspace(); }).finally(() => setLoading(false));
   }, [refresh, section]);
   useEffect(() => { if (new URLSearchParams(window.location.search).get('invite')) setMode('register'); }, []);
   async function authenticate(event: FormEvent<HTMLFormElement>) {
@@ -58,7 +69,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
       const linkToken = new URLSearchParams(window.location.search).get('invite');
       const payload = { name: form.get('name'), email: form.get('email'), password: form.get('password'), ...((form.get('inviteToken') || linkToken) ? { inviteToken: form.get('inviteToken') || linkToken } : {}) };
       if (mode === 'register') await api<Account>('register', json(payload));
-      await api<{account: Account}>('login', json(payload)); window.location.replace('/organizador'); return;
+      await api<{account: Account}>('login', json(payload)); clearClientWorkspace(); window.location.replace('/organizador'); return;
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
   }
   async function createCard(event: FormEvent<HTMLFormElement>) {
@@ -99,7 +110,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     catch (reason) { setError((reason as Error).message); }
     finally { setBusy(false); if (avatarInput.current) avatarInput.current.value = ''; }
   }
-  async function logout() { await api('logout', json({})).catch(() => {}); workspaceCache = null; setAccount(null); setCards([]); setDocuments([]); setMembers([]); }
+  async function logout() { await api('logout', json({})).catch(() => {}); clearClientWorkspace(); setAccount(null); setCards([]); setDocuments([]); setMembers([]); }
   if (loading) return embedded ? <section className="account-embedded-loading" aria-label="Carregando dados da conta"><span/></section> : <main className="cloud-loading"><Cloud/><span>Conectando ao seu espaço…</span></main>;
   if (!account && embedded) return <section className="account-auth-required panel"><span className="eyebrow">ACESSO NECESSÁRIO</span><h2>Entre para abrir seu espaço.</h2><p>Cartões, faturas e compradores ficam disponíveis após o login.</p><a className="button primary" href="/acesso">Entrar ou criar conta <ArrowRight/></a></section>;
   if (!account) return <main className="auth-shell auth-experience">

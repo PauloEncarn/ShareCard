@@ -40,6 +40,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   async function logout() {
     try { await fetch(logoutEndpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } finally {
       window.sessionStorage.removeItem('sharecard:workspace-stale');
+      window.sessionStorage.removeItem('sharecard:workspace-account-id');
+      window.localStorage.removeItem('fatura-em-dia:v1');
       window.location.assign('/');
     }
   }

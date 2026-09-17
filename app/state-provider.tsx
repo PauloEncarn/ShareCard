@@ -62,6 +62,9 @@ export function StateProvider({ children }: { children: ReactNode }) {
           fetch(workspaceEndpoint, { credentials: 'same-origin' }),
         ]);
         if (me.ok) {
+          // A sessão autenticada sempre usa o espaço remoto. Nunca reutilize um
+          // rascunho de outro usuário que tenha ficado neste navegador.
+          localStorage.removeItem('fatura-em-dia:v1');
           const account = await me.json() as { role: string };
           if (account.role !== 'master') {
             hydrated.current = true;
@@ -81,8 +84,16 @@ export function StateProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const saved = localStorage.getItem('fatura-em-dia:v1');
-        if (saved) setState(validateBackup(JSON.parse(saved)));
+        setRemote(false);
+        setState(emptyState);
+        // O rascunho local existe somente para o modo Floci local. Em produção,
+        // os dados pertencem à conta no Supabase e não podem atravessar logins.
+        if (accountBackend === 'floci') {
+          const saved = localStorage.getItem('fatura-em-dia:v1');
+          if (saved) setState(validateBackup(JSON.parse(saved)));
+        } else {
+          localStorage.removeItem('fatura-em-dia:v1');
+        }
       } catch {
         setStorageError('Não foi possível carregar a organização. Atualize a página e tente novamente.');
       } finally {
