@@ -59,6 +59,34 @@ export async function registerMaster(input: Record<string, unknown>) {
     if (invitation.email.toLowerCase() !== email) throw new IdentityError(400, 'Use o mesmo e-mail que recebeu o convite.');
   }
 
+  // A revogação preserva a conta no Supabase para manter seu histórico. Quando
+  // o master convida esse mesmo e-mail novamente, reaproveitamos a conta e
+  // reativamos apenas o acesso ao espaço indicado pelo novo convite.
+  if (invitation) {
+    const listed = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listed.error) throw new IdentityError(503, 'Não foi possível verificar a conta convidada.');
+    const existingUser = listed.data.users.find(user => user.email?.toLowerCase() === email);
+    if (existingUser) {
+      const existingProfile = await admin.from('profiles').select('id, master_id, role, name, active').eq('id', existingUser.id).maybeSingle<ProfileRow>();
+      if (existingProfile.error || !existingProfile.data || existingProfile.data.role !== 'buyer' || existingProfile.data.master_id !== invitation.master_id) {
+        throw new IdentityError(409, 'Este e-mail já possui uma conta em outro espaço. Entre com ela ou use outro e-mail.');
+      }
+      if (existingProfile.data.active) throw new IdentityError(409, 'Esta conta já possui acesso ativo. Entre com seu e-mail e senha.');
+
+      const claimed = await admin.from('invitations').update({ used_at: new Date().toISOString() }).eq('id', invitation.id).is('used_at', null).gt('expires_at', new Date().toISOString()).select('id').maybeSingle();
+      if (claimed.error || !claimed.data) throw new IdentityError(400, 'Este convite já foi utilizado ou expirou. Peça um novo convite ao master.');
+      const restored = await admin.from('profiles').update({ active: true, name, updated_at: new Date().toISOString() }).eq('id', existingUser.id).eq('master_id', invitation.master_id).eq('role', 'buyer').eq('active', false).select('id').maybeSingle();
+      if (restored.error || !restored.data) throw new IdentityError(503, 'Não foi possível reativar o acesso desta conta.');
+      const passwordUpdate = await admin.auth.admin.updateUserById(existingUser.id, { password: password(input.password), email_confirm: true });
+      if (passwordUpdate.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível atualizar a senha. Tente entrar com a senha anterior.');
+      if (invitation.person_id) {
+        const linked = await admin.from('people').update({ account_id: existingUser.id, updated_at: new Date().toISOString() }).eq('id', invitation.person_id).eq('master_id', invitation.master_id).is('account_id', null);
+        if (linked.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível vincular a pessoa.');
+      }
+      return signIn(email, input.password);
+    }
+  }
+
   const created = await admin.auth.admin.createUser({ email, password: password(input.password), email_confirm: true });
   if (created.error || !created.data.user) {
     throw registrationError(created.error?.message);
