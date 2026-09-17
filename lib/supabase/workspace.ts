@@ -87,13 +87,13 @@ export async function savePerson(account: SupabaseAccount, input: Record<string,
   const phone = input.phone === undefined || input.phone === null || input.phone === '' ? null : text(input.phone, 'Telefone', 30);
   const value = { master_id: account.masterId, account_id: accountId, name: text(input.name, 'Nome', 80), email, phone, color: typeof input.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : '#2563EB', monthly_limit_cents: cents(input.monthlyLimitCents), updated_at: new Date().toISOString() };
   if (!id) {
-    const inserted = await admin.from('people').insert(value).select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').single<PersonRow>();
+    const inserted = await admin.from('people').insert(value).select('id, master_id, account_id, name, email, phone, color, monthly_limit_cents, version, created_at, updated_at').single<PersonRow>();
     if (inserted.error || !inserted.data) throw new IdentityError(503, 'Não foi possível criar a pessoa.');
     return publicPerson(inserted.data);
   }
   const version = input.version;
   if (!Number.isInteger(version) || (version as number) < 1) throw new IdentityError(400, 'Versão inválida.');
-  const updated = await admin.from('people').update({ ...value, version: (version as number) + 1 }).eq('id', id).eq('master_id', account.masterId).eq('version', version as number).select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').maybeSingle<PersonRow>();
+  const updated = await admin.from('people').update({ ...value, version: (version as number) + 1 }).eq('id', id).eq('master_id', account.masterId).eq('version', version as number).select('id, master_id, account_id, name, email, phone, color, monthly_limit_cents, version, created_at, updated_at').maybeSingle<PersonRow>();
   if (updated.error) throw new IdentityError(503, 'Não foi possível atualizar a pessoa.');
   if (!updated.data) throw new IdentityError(409, 'Esta pessoa foi alterada por outra pessoa. Atualize a tela e tente novamente.');
   return publicPerson(updated.data);
