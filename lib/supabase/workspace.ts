@@ -101,7 +101,7 @@ export async function savePerson(account: SupabaseAccount, input: Record<string,
 export async function members(account: SupabaseAccount) {
   masterOnly(account);
   const admin = createSupabaseAdminClient();
-  const profiles = await admin.from('profiles').select('id, master_id, role, name, active').eq('master_id', account.masterId).returns<ProfileRow[]>();
+  const profiles = await admin.from('profiles').select('id, master_id, role, name, active').eq('master_id', account.masterId).eq('active', true).returns<ProfileRow[]>();
   if (profiles.error) throw new IdentityError(503, 'Não foi possível consultar os membros.');
   const users = await Promise.all((profiles.data || []).map(async profile => {
     const user = await admin.auth.admin.getUserById(profile.id);
@@ -129,9 +129,13 @@ export async function invite(account: SupabaseAccount, rawEmail: unknown, rawPer
 
 export async function revokeMember(account: SupabaseAccount, rawId: unknown) {
   masterOnly(account);
-  const id = text(rawId, 'Comprador', 80);
-  const result = await createSupabaseAdminClient().from('profiles').update({ active: false, updated_at: new Date().toISOString() }).eq('id', id).eq('master_id', account.masterId).eq('role', 'buyer');
+  const id = text(rawId, 'Comprador', 80), admin = createSupabaseAdminClient(), updatedAt = new Date().toISOString();
+  const result = await admin.from('profiles').update({ active: false, updated_at: updatedAt }).eq('id', id).eq('master_id', account.masterId).eq('role', 'buyer').select('id').maybeSingle();
   if (result.error) throw new IdentityError(503, 'Não foi possível revogar o acesso.');
+  if (!result.data) throw new IdentityError(404, 'Comprador não encontrado ou já revogado.');
+  // Mantém a pessoa e as compras históricas, mas remove o vínculo da conta.
+  const detached = await admin.from('people').update({ account_id: null, updated_at: updatedAt }).eq('master_id', account.masterId).eq('account_id', id);
+  if (detached.error) throw new IdentityError(503, 'O acesso foi revogado, mas não foi possível desvincular a pessoa. Atualize a página.');
   return { ok: true };
 }
 
