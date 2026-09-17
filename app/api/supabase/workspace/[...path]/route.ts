@@ -37,7 +37,7 @@ async function handle(request: Request, context: Context) {
     if (path === 'cards') return Response.json(await createCard(account, body), { status: 201, headers });
     if (path === 'people') return Response.json(await savePerson(account, body), { status: 201, headers });
     if (path.startsWith('people/')) return Response.json(await savePerson(account, body, path.slice('people/'.length)), { headers });
-    if (path === 'invites') return Response.json(await invite(account, body.email), { status: 201, headers });
+    if (path === 'invites') return Response.json(await invite(account, body.email, body.personId), { status: 201, headers });
     if (path === 'members/revoke') return Response.json(await revokeMember(account, body.userId), { headers });
     throw new IdentityError(404, 'Rota não encontrada.');
   } catch (error) {

@@ -4,7 +4,7 @@ import { IdentityError, type SupabaseAccount } from './identity';
 import { syncWorkspaceTransactions } from './transaction-sync';
 
 type CardRow = { id: string; master_id: string; name: string; due_day: number; issuer?: string; last4?: string | null; created_at: string };
-type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
+type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; email?: string | null; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
 type StatementRow = { id: string; master_id: string; card_id: string; due_date: string; filename: string; storage_path: string; sha256: string; size_bytes: number; created_at: string };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -24,7 +24,7 @@ const cents = (value: unknown) => {
 };
 const publicCard = (row: CardRow) => ({ id: row.id, masterId: row.master_id, name: row.name, dueDay: row.due_day, issuer: row.issuer || 'Itaú', last4: row.last4 ?? null, createdAt: row.created_at });
 const cardIdentityUnavailable = (error: { code?: string; message?: string } | null) => !!error && (error.code === '42703' || error.code === 'PGRST204' || /\b(issuer|last4)\b/i.test(error.message || ''));
-const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id, accountId: row.account_id, name: row.name, color: row.color, monthlyLimitCents: row.monthly_limit_cents, version: row.version, createdAt: row.created_at, updatedAt: row.updated_at });
+const publicPerson = (row: PersonRow) => ({ id: row.id, masterId: row.master_id, accountId: row.account_id, name: row.name, email: row.email ?? null, color: row.color, monthlyLimitCents: row.monthly_limit_cents, version: row.version, createdAt: row.created_at, updatedAt: row.updated_at });
 const publicMember = (row: ProfileRow, email: string) => ({ id: row.id, masterId: row.master_id, role: row.role, name: row.name, email, active: row.active, avatarUrl: null });
 const publicDocument = (row: StatementRow) => ({ id: row.id, masterId: row.master_id, cardId: row.card_id, dueDate: row.due_date, size: row.size_bytes, sha256: row.sha256, createdAt: row.created_at });
 
@@ -68,7 +68,7 @@ export async function deleteCard(account: SupabaseAccount, rawId: unknown) {
   return { ok: true };
 }
 export async function people(account: SupabaseAccount) {
-  const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
+  const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar as pessoas.');
   const rows = result.data || [];
   return (account.role === 'master' ? rows : rows.filter(row => row.account_id === account.id)).map(publicPerson);
@@ -82,15 +82,17 @@ export async function savePerson(account: SupabaseAccount, input: Record<string,
     const member = await admin.from('profiles').select('id, master_id, role, name, active').eq('id', accountId).single<ProfileRow>();
     if (member.error || !member.data || member.data.master_id !== account.masterId || member.data.role !== 'buyer') throw new IdentityError(400, 'A conta escolhida não pertence a este grupo.');
   }
-  const value = { master_id: account.masterId, account_id: accountId, name: text(input.name, 'Nome', 80), color: typeof input.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : '#2563EB', monthly_limit_cents: cents(input.monthlyLimitCents), updated_at: new Date().toISOString() };
+  const email = input.email === undefined || input.email === null || input.email === '' ? null : text(input.email, 'E-mail', 254).toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new IdentityError(400, 'E-mail inválido.');
+  const value = { master_id: account.masterId, account_id: accountId, name: text(input.name, 'Nome', 80), email, color: typeof input.color === 'string' && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : '#2563EB', monthly_limit_cents: cents(input.monthlyLimitCents), updated_at: new Date().toISOString() };
   if (!id) {
-    const inserted = await admin.from('people').insert(value).select('id, master_id, account_id, name, color, monthly_limit_cents, version, created_at, updated_at').single<PersonRow>();
+    const inserted = await admin.from('people').insert(value).select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').single<PersonRow>();
     if (inserted.error || !inserted.data) throw new IdentityError(503, 'Não foi possível criar a pessoa.');
     return publicPerson(inserted.data);
   }
   const version = input.version;
   if (!Number.isInteger(version) || (version as number) < 1) throw new IdentityError(400, 'Versão inválida.');
-  const updated = await admin.from('people').update({ ...value, version: (version as number) + 1 }).eq('id', id).eq('master_id', account.masterId).eq('version', version as number).select('id, master_id, account_id, name, color, monthly_limit_cents, version, created_at, updated_at').maybeSingle<PersonRow>();
+  const updated = await admin.from('people').update({ ...value, version: (version as number) + 1 }).eq('id', id).eq('master_id', account.masterId).eq('version', version as number).select('id, master_id, account_id, name, email, color, monthly_limit_cents, version, created_at, updated_at').maybeSingle<PersonRow>();
   if (updated.error) throw new IdentityError(503, 'Não foi possível atualizar a pessoa.');
   if (!updated.data) throw new IdentityError(409, 'Esta pessoa foi alterada por outra pessoa. Atualize a tela e tente novamente.');
   return publicPerson(updated.data);
@@ -108,12 +110,19 @@ export async function members(account: SupabaseAccount) {
   return users;
 }
 
-export async function invite(account: SupabaseAccount, rawEmail: unknown) {
+export async function invite(account: SupabaseAccount, rawEmail: unknown, rawPersonId?: unknown) {
   masterOnly(account);
   const email = text(rawEmail, 'E-mail', 254).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new IdentityError(400, 'E-mail inválido.');
+  const admin = createSupabaseAdminClient();
+  const personId = rawPersonId ? text(rawPersonId, 'Pessoa', 80) : null;
+  if (personId) {
+    const person = await admin.from('people').select('id, email').eq('id', personId).eq('master_id', account.masterId).maybeSingle<{ id: string; email: string | null }>();
+    if (person.error || !person.data) throw new IdentityError(404, 'Pessoa não encontrada.');
+    if (!person.data.email || person.data.email.toLowerCase() !== email) throw new IdentityError(400, 'O e-mail do convite deve ser o e-mail cadastrado para esta pessoa.');
+  }
   const token = code(), expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const result = await createSupabaseAdminClient().from('invitations').insert({ master_id: account.masterId, email, token_hash: hash(token), expires_at: expiresAt });
+  const result = await admin.from('invitations').insert({ master_id: account.masterId, person_id: personId, email, token_hash: hash(token), expires_at: expiresAt });
   if (result.error) throw new IdentityError(503, 'Não foi possível criar o convite.');
   return { token, expiresAt };
 }

@@ -13,7 +13,7 @@ export type SupabaseAccount = {
 };
 
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
-type InvitationRow = { id: string; master_id: string; email: string; expires_at: string; used_at: string | null };
+type InvitationRow = { id: string; master_id: string; person_id: string | null; email: string; expires_at: string; used_at: string | null };
 
 const validEmail = (value: unknown) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const requiredText = (value: unknown, label: string, max: number) => {
@@ -53,7 +53,7 @@ export async function registerMaster(input: Record<string, unknown>) {
 
   if (inviteToken) {
     const tokenHash = createHash('sha256').update(inviteToken).digest('hex');
-    const found = await admin.from('invitations').select('id, master_id, email, expires_at, used_at').eq('token_hash', tokenHash).maybeSingle<InvitationRow>();
+    const found = await admin.from('invitations').select('id, master_id, person_id, email, expires_at, used_at').eq('token_hash', tokenHash).maybeSingle<InvitationRow>();
     invitation = found.data || null;
     if (found.error || !invitation || invitation.used_at || new Date(invitation.expires_at).getTime() <= Date.now()) throw new IdentityError(400, 'Convite inválido, utilizado ou expirado.');
     if (invitation.email.toLowerCase() !== email) throw new IdentityError(400, 'Use o mesmo e-mail que recebeu o convite.');
@@ -77,9 +77,15 @@ export async function registerMaster(input: Record<string, unknown>) {
       await admin.auth.admin.deleteUser(user.id);
       throw new IdentityError(400, 'Este convite já foi utilizado ou expirou. Peça um novo convite ao master.');
     }
-    const unlinked = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
-    if (unlinked.data) await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', unlinked.data.id);
-    else await admin.from('people').insert({ master_id: invitation.master_id, account_id: user.id, name, color: '#2563EB' });
+    if (invitation.person_id) {
+      const linked = await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', invitation.person_id).eq('master_id', invitation.master_id).is('account_id', null);
+      if (linked.error) throw new IdentityError(503, 'A conta foi criada, mas não foi possível vinculá-la ao comprador.');
+    } else {
+      // Convites antigos não têm person_id. Mantemos esta compatibilidade uma única vez.
+      const unlinked = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
+      if (unlinked.data) await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', unlinked.data.id);
+      else await admin.from('people').insert({ master_id: invitation.master_id, account_id: user.id, name, email, color: '#2563EB' });
+    }
   }
 
   return signIn(email, input.password);
