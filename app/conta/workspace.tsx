@@ -42,7 +42,7 @@ const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)
 export default function CloudWorkspace({ embedded = false, section = 'management' }: { embedded?: boolean; section?: 'profile' | 'management' }) {
   const initial = cachedWorkspace(section);
   const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => embedded && !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login');
+  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
   const [invite, setInvite] = useState(''), [busy, setBusy] = useState(false), [selectedCardId, setSelectedCardId] = useState(''); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async (current: Account) => {
     if (section === 'profile') {
@@ -57,19 +57,24 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     window.sessionStorage.removeItem('sharecard:workspace-stale');
   }, [section]);
   useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('invite')?.trim() || '';
+    setInviteToken(token);
+    if (token) { clearClientWorkspace(); setAccount(null); setCards([]); setDocuments([]); setMembers([]); setWorkspaceState(null); setCardsLoaded(false); setMode('register'); setLoading(false); }
+  }, []);
+  useEffect(() => {
+    if (inviteToken === null) return;
+    if (inviteToken) return;
     const cached = cachedWorkspace(section);
     if (cached) { setAccount(cached.account); setCards(cached.cards); setDocuments(cached.documents); setMembers(cached.members); setLoading(false); return; }
     api<Account>('me').then(async current => {
       if (!embedded) { window.location.replace('/organizador'); return; }
       setAccount(current); await refresh(current);
     }).catch(() => { clearClientWorkspace(); setCardsLoaded(false); setError('Não foi possível carregar seus cartões agora. Atualize a página para tentar novamente.'); }).finally(() => setLoading(false));
-  }, [refresh, section]);
-  useEffect(() => { if (new URLSearchParams(window.location.search).get('invite')) setMode('register'); }, []);
+  }, [inviteToken, refresh, section]);
   async function authenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget);
     try {
-      const linkToken = new URLSearchParams(window.location.search).get('invite');
-      const payload = { name: form.get('name'), email: form.get('email'), password: form.get('password'), ...((form.get('inviteToken') || linkToken) ? { inviteToken: form.get('inviteToken') || linkToken } : {}) };
+      const payload = { name: form.get('name'), email: form.get('email'), password: form.get('password'), ...((form.get('inviteToken') || inviteToken) ? { inviteToken: form.get('inviteToken') || inviteToken } : {}) };
       if (mode === 'register') await api<Account>('register', json(payload));
       await api<{account: Account}>('login', json(payload)); clearClientWorkspace(); window.location.replace('/organizador'); return;
     } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
@@ -124,10 +129,11 @@ export default function CloudWorkspace({ embedded = false, section = 'management
       <ul className="auth-benefits"><li><ShieldCheck/> Seguro e confiável</li><li><Users/> Feito para compartilhar</li><li><CalendarDays/> Mais controle no dia a dia</li></ul>
     </section>
     <section className="auth-panel-wrap"><p className="auth-aside-note">Pagamentos mais simples<br/>para grandes momentos.</p><a className="back-link" href="/"><ArrowLeft/> Voltar</a><div className="auth-form">
-      <div className="auth-tabs" role="tablist" aria-label="Acesso à conta"><button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }}>Entrar</button><button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></div>
-      <div className="auth-heading"><span className="auth-heading-icon"><ShieldCheck/></span><h2>{mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h2><p>{mode === 'login' ? 'Acesse sua conta para continuar.' : 'Comece a organizar as compras do seu grupo.'}</p></div>
-      <form onSubmit={authenticate}>{mode === 'register' && <label>Seu nome<input name="name" required maxLength={100} autoComplete="name" placeholder="Seu nome completo"/></label>}<label>E-mail<input name="email" type="email" required autoComplete="email" placeholder="seu@email.com"/></label><label>Senha<input name="password" type="password" minLength={6} maxLength={128} required autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? 'Digite sua senha' : 'Crie uma senha segura'}/><small>Use pelo menos 6 caracteres.</small></label>{mode === 'register' && <label>Código de convite <span>opcional</span><input name="inviteToken" maxLength={64} placeholder="Cole seu código"/><small>Sem código, você cria um espaço master.</small></label>}{error && <p className="cloud-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={busy}>{busy ? 'Aguarde…' : mode === 'login' ? <>Entrar <ArrowRight/></> : <>Criar conta <ArrowRight/></>}</button></form>
-      <p className="auth-switch">{mode === 'login' ? <>Ainda não tem uma conta? <button type="button" onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></> : <>Já possui uma conta? <button type="button" onClick={() => { setMode('login'); setError(''); }}>Entrar</button></>}</p><p className="local-mode"><ShieldCheck/> Seus dados são protegidos e seguros.</p>
+      <div className="auth-tabs" role="tablist" aria-label="Acesso à conta"><button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} disabled={Boolean(inviteToken)} onClick={() => { setMode('login'); setError(''); }}>Entrar</button><button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></div>
+      <div className="auth-heading"><span className="auth-heading-icon"><ShieldCheck/></span><h2>{inviteToken ? 'Seu convite está pronto' : mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h2><p>{inviteToken ? 'Crie ou reative sua conta para entrar no espaço compartilhado.' : mode === 'login' ? 'Acesse sua conta para continuar.' : 'Comece a organizar as compras do seu grupo.'}</p></div>
+      {inviteToken && <p className="cloud-notice" role="status">Convite identificado. Use o e-mail que recebeu o convite e defina uma senha para continuar.</p>}
+      <form onSubmit={authenticate}>{mode === 'register' && <label>Seu nome<input name="name" required maxLength={100} autoComplete="name" placeholder="Seu nome completo"/></label>}<label>E-mail<input name="email" type="email" required autoComplete="email" placeholder="seu@email.com"/></label><label>Senha<input name="password" type="password" minLength={6} maxLength={128} required autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? 'Digite sua senha' : 'Crie uma senha segura'}/><small>Use pelo menos 6 caracteres.</small></label>{mode === 'register' && !inviteToken && <label>Código de convite <span>opcional</span><input name="inviteToken" maxLength={64} placeholder="Cole seu código"/><small>Sem código, você cria um espaço master.</small></label>}{error && <p className="cloud-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={busy}>{busy ? 'Aguarde…' : mode === 'login' ? <>Entrar <ArrowRight/></> : inviteToken ? <>Ativar acesso <ArrowRight/></> : <>Criar conta <ArrowRight/></>}</button></form>
+      {!inviteToken && <p className="auth-switch">{mode === 'login' ? <>Ainda não tem uma conta? <button type="button" onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></> : <>Já possui uma conta? <button type="button" onClick={() => { setMode('login'); setError(''); }}>Entrar</button></>}</p>}<p className="local-mode"><ShieldCheck/> Seus dados são protegidos e seguros.</p>
     </div></section>
   </main>;
   const cardName = (id: string) => cards.find(card => card.id === id)?.name || 'Cartão';
