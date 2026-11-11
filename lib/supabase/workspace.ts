@@ -116,12 +116,11 @@ export async function invite(account: SupabaseAccount, rawEmail: unknown, rawPer
   const email = text(rawEmail, 'E-mail', 254).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new IdentityError(400, 'E-mail inválido.');
   const admin = createSupabaseAdminClient();
-  const personId = rawPersonId ? text(rawPersonId, 'Pessoa', 80) : null;
-  if (personId) {
-    const person = await admin.from('people').select('id, email').eq('id', personId).eq('master_id', account.masterId).maybeSingle<{ id: string; email: string | null }>();
-    if (person.error || !person.data) throw new IdentityError(404, 'Pessoa não encontrada.');
-    if (!person.data.email || person.data.email.toLowerCase() !== email) throw new IdentityError(400, 'O e-mail do convite deve ser o e-mail cadastrado para esta pessoa.');
-  }
+  if (!rawPersonId) throw new IdentityError(400, 'Escolha uma Pessoa cadastrada antes de enviar um convite.');
+  const personId = text(rawPersonId, 'Pessoa', 80);
+  const person = await admin.from('people').select('id, email').eq('id', personId).eq('master_id', account.masterId).maybeSingle<{ id: string; email: string | null }>();
+  if (person.error || !person.data) throw new IdentityError(404, 'Pessoa não encontrada.');
+  if (!person.data.email || person.data.email.toLowerCase() !== email) throw new IdentityError(400, 'O e-mail do convite deve ser o e-mail cadastrado para esta pessoa.');
   const token = code(), expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const result = await admin.from('invitations').insert({ master_id: account.masterId, person_id: personId, email, token_hash: hash(token), expires_at: expiresAt });
   if (result.error) throw new IdentityError(503, 'Não foi possível criar o convite.');
