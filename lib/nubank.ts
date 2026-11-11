@@ -1,4 +1,4 @@
-import { parseMoney, sum, type Statement, type Transaction } from './model';
+import { parseMoney, type Statement, type Transaction } from './model';
 import { pageLines, type PdfPage } from './itau';
 
 const monthNumber: Record<string, string> = {
@@ -49,8 +49,6 @@ export function parseNubank(pages: PdfPage[], filename: string, fingerprint: str
   let readingTransactions = false;
   let holder = 'Titular não identificado';
   let otherLaunches: number | undefined;
-  let sawSeveralCards = false;
-  const cardEnds = new Set<string>();
 
   for (const line of allLines) {
     if (/^PR[ÓO]XIMAS FATURAS/i.test(line)) { readingTransactions = false; continue; }
@@ -74,8 +72,6 @@ export function parseNubank(pages: PdfPage[], filename: string, fingerprint: str
     const month = monthNumber[row[2].toUpperCase()];
     if (!month) continue;
     const cents = parseMoney(row[5].replace(/[−]/g, '-').replace(/R\$\s*/i, ''));
-    const last4 = row[3];
-    if (last4) { cardEnds.add(last4); sawSeveralCards ||= cardEnds.size > 1; }
     let merchant = row[4].trim();
     const installmentMatch = merchant.match(/\s+-\s+Parcela\s+(\d{1,2})\/(\d{1,2})$/i);
     if (installmentMatch) merchant = merchant.slice(0, installmentMatch.index).trim();
@@ -115,7 +111,5 @@ export function parseNubank(pages: PdfPage[], filename: string, fingerprint: str
       note: 'Valor informado no resumo da fatura Nubank.',
     });
   }
-  if (sawSeveralCards) statement.warnings.push('A fatura Nubank possui lançamentos de mais de um cartão final. Confirme o cartão correto antes de salvar.');
-  if (sum(statement.transactions) !== total) statement.warnings.push('O total a pagar da Nubank também considera fatura anterior e pagamentos recebidos. O ShareCard importou somente as transações do período para organizar.');
   return statement;
 }

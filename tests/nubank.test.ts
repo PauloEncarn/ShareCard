@@ -24,7 +24,7 @@ test('lê fatura Nubank: vencimento, compras, parcelas, estorno e outros lançam
   assert.equal(sum(bill.transactions), 12000);
   assert.equal(bill.nextTotal, 7000);
   assert.equal(bill.holderTotals[0].name, 'Ana Exemplo');
-  assert.ok(bill.warnings.some(message => message.includes('mais de um cartão')));
+  assert.deepEqual(bill.warnings, []);
 });
 
 test('rejeita conteúdo que não seja uma fatura Nubank', () => {
