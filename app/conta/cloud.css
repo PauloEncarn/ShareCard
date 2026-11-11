@@ -26,6 +26,7 @@
 
 .account-embedded-loading{min-height:124px;display:flex;align-items:center;justify-content:center}.account-embedded-loading span{width:28px;height:28px;border:3px solid #dbeafe;border-top-color:#2563eb;border-radius:50%;animation:sharecard-spin .7s linear infinite}@keyframes sharecard-spin{to{transform:rotate(360deg)}}.account-profile .master-tools,.account-profile .cycle-section,.account-profile .upload-band,.account-profile .document-section,.account-profile .member-section{display:none}.profile-details{display:flex;justify-content:space-between;gap:28px;padding:28px;margin-top:2px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.profile-details h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.04em;margin:7px 0 4px}.profile-details p{color:#64748b}.profile-details dl{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:18px;margin:0}.profile-details dt{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8}.profile-details dd{margin:4px 0 0;font-size:.86rem;font-weight:700;color:#334155}@media(max-width:720px){.profile-details{display:grid;padding:22px;gap:22px}.profile-details dl{grid-template-columns:1fr}}
 .document-delete{justify-self:end;color:#dc2626!important;font-size:.78rem}
+.card-editor{display:grid;grid-template-columns:1.35fr repeat(3,minmax(120px,1fr));gap:14px;align-items:end;margin-top:22px;padding:20px;border:1px solid #bfdbfe;border-radius:14px;background:#f8fbff}.card-editor h3{font-size:1.05rem;margin:5px 0}.card-editor p{font-size:.76rem;color:#64748b;max-width:320px}.card-editor label{display:flex;flex-direction:column;gap:6px;color:#475569;font-size:.75rem;font-weight:700}.card-editor input,.card-editor select{width:100%;min-height:42px}.card-editor-actions{display:flex;gap:8px;grid-column:2 / -1;justify-content:flex-end}.selected-card-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 
 /* Mobile comfort: full-height actions, shorter lists and no horizontal pressure. */
 @media (max-width: 800px) {
@@ -52,3 +53,4 @@
   .section-line > strong { font-size:1.65rem; }
   .master-tools > section { padding:16px; }
 }
+@media (max-width: 800px) {.card-editor{grid-template-columns:1fr;padding:17px}.card-editor-actions{grid-column:auto;justify-content:stretch}.card-editor-actions .button{flex:1}.selected-card-actions{margin-top:12px}}

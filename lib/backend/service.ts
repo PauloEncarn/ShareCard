@@ -95,8 +95,16 @@ export class Backend {
   }
   async createCard(account: Account, input: Record<string, unknown>) {
     authorize(account, account.masterId, true);
-    const card: Card = { id: randomUUID(), masterId: account.masterId, name: text(input.name, 'Nome do cartão'), dueDay: dueDay(input.dueDay) };
+    const card: Card = { id: randomUUID(), masterId: account.masterId, name: text(input.name, 'Nome do cartão'), dueDay: dueDay(input.dueDay), issuer: typeof input.issuer === 'string' && input.issuer.trim() ? input.issuer.trim().slice(0, 40) : 'Itaú', last4: typeof input.last4 === 'string' && /^\d{4}$/.test(input.last4) ? input.last4 : null };
     await this.store.put(`MASTER#${account.masterId}`, `CARD#${card.id}`, card);
+    return card;
+  }
+  async updateCard(account: Account, cardId: unknown, input: Record<string, unknown>) {
+    authorize(account, account.masterId, true);
+    const id = identifier(cardId), key = `CARD#${id}`, current = await this.store.get<Card>(`MASTER#${account.masterId}`, key);
+    if (!current) throw new ApiError(404, 'Cartão não encontrado. Atualize a tela e tente novamente.');
+    const card: Card = { ...current, name: text(input.name, 'Nome do cartão'), dueDay: dueDay(input.dueDay), issuer: typeof input.issuer === 'string' && input.issuer.trim() ? input.issuer.trim().slice(0, 40) : 'Itaú', last4: typeof input.last4 === 'string' && /^\d{4}$/.test(input.last4) ? input.last4 : null };
+    await this.store.put(`MASTER#${account.masterId}`, key, card);
     return card;
   }
   async people(account: Account) {

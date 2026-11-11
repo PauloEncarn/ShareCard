@@ -57,6 +57,7 @@ async function handle(request: Request, context: Context) {
       const image = await api.avatar(account, path.slice('avatars/'.length));
       return new Response(Buffer.from(image.bytes), { headers: { ...headers, 'Content-Type': image.contentType, 'Content-Disposition': 'inline' } });
     }
+    if (post && path.startsWith('cards/')) return Response.json(await api.updateCard(account, path.slice('cards/'.length), input), { headers });
     if (path === 'cards') return Response.json(post ? await api.createCard(account, input) : await api.cards(account), { status: post ? 201 : 200, headers });
     if (post && path === 'statements/import') {
       const form = await request.formData(), file = form.get('file'), parsed = form.get('statement');

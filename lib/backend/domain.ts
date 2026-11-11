@@ -6,7 +6,7 @@ export class ApiError extends Error {
 }
 export type AvatarContentType = 'image/jpeg' | 'image/png' | 'image/webp';
 export type Account = { id: string; masterId: string; role: 'master' | 'buyer'; name: string; email: string; passwordHash: string; active: boolean; avatarKey?: string; avatarContentType?: AvatarContentType; avatarUpdatedAt?: string };
-export type Card = { id: string; masterId: string; name: string; dueDay: number };
+export type Card = { id: string; masterId: string; name: string; dueDay: number; issuer?: string; last4?: string | null };
 export type Document = { id: string; masterId: string; cardId: string; dueDate: string; key: string; size: number; sha256: string; createdAt: string };
 export type PersonRecord = { id: string; masterId: string; name: string; color: string; monthlyLimitCents?: number; accountId?: string; version: number; createdAt: string; updatedAt: string };
 export type AllocationRecord = { personId: string; cents: number };

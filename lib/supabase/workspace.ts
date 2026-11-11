@@ -56,6 +56,16 @@ export async function createCard(account: SupabaseAccount, input: Record<string,
   if (result.error || !result.data) throw new IdentityError(503, 'Não foi possível criar o cartão.');
   return publicCard(result.data);
 }
+export async function updateCard(account: SupabaseAccount, rawId: unknown, input: Record<string, unknown>) {
+  masterOnly(account);
+  const id = text(rawId, 'Cartão', 80), admin = createSupabaseAdminClient();
+  const value = { name: text(input.name, 'Nome do cartão', 100), due_day: day(input.dueDay), issuer: typeof input.issuer === 'string' && input.issuer.trim() ? input.issuer.trim().slice(0, 40) : 'Itaú', last4: typeof input.last4 === 'string' && /^\d{4}$/.test(input.last4) ? input.last4 : null };
+  let result = await admin.from('cards').update(value).eq('id', id).eq('master_id', account.masterId).select('id, master_id, name, due_day, issuer, last4, created_at').maybeSingle<CardRow>();
+  if (cardIdentityUnavailable(result.error)) result = await admin.from('cards').update({ name: value.name, due_day: value.due_day }).eq('id', id).eq('master_id', account.masterId).select('id, master_id, name, due_day, created_at').maybeSingle<CardRow>();
+  if (result.error) throw new IdentityError(503, 'Não foi possível atualizar o cartão.');
+  if (!result.data) throw new IdentityError(404, 'Cartão não encontrado. Atualize a tela e tente novamente.');
+  return publicCard(result.data);
+}
 export async function deleteCard(account: SupabaseAccount, rawId: unknown) {
   masterOnly(account);
   const id = text(rawId, 'Cartão', 80), admin = createSupabaseAdminClient();
