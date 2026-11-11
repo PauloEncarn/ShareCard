@@ -40,7 +40,9 @@ const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString
 const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
 export default function CloudWorkspace({ embedded = false, section = 'management' }: { embedded?: boolean; section?: 'profile' | 'management' }) {
-  const initial = cachedWorkspace(section);
+  // Perfil sempre consulta a sessão atual. Reutilizar cache aqui poderia exibir
+  // por instantes dados de quem usou o navegador antes.
+  const initial = section === 'profile' ? null : cachedWorkspace(section);
   const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => embedded && !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [selectedCardId, setSelectedCardId] = useState(''); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
