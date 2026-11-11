@@ -1,4 +1,5 @@
 import { parseItau, type PdfPage } from './itau';
+import { parseNubank } from './nubank';
 export async function readStatement(file: File) {
   if (!file.name.toLowerCase().endsWith('.pdf')) throw new Error('Selecione um arquivo PDF.');
   if (file.size > 15 * 1024 * 1024) throw new Error('O PDF deve ter no máximo 15 MB.');
@@ -21,7 +22,10 @@ export async function readStatement(file: File) {
       const page = await doc.getPage(n), content = await page.getTextContent();
       pages.push({ width: page.getViewport({ scale: 1 }).width, parts: content.items.flatMap(item => 'str' in item ? [{ text: item.str, x: item.transform[4], y: item.transform[5], width: item.width }] : []) });
     }
-    return parseItau(pages, file.name, fingerprint);
+    const extractedText = pages.flatMap(page => page.parts.map(part => part.text)).join(' ');
+    return /Nu Pagamentos|\bNubank\b/i.test(extractedText) && /TRANSA[ÇC][ÕO]ES/i.test(extractedText)
+      ? parseNubank(pages, file.name, fingerprint)
+      : parseItau(pages, file.name, fingerprint);
   } catch (e) {
     if (e instanceof Error && e.name === 'PasswordException') throw new Error('Este PDF tem senha. Exporte uma cópia sem senha para importar.');
     if (e instanceof Error && /worker|dynamically imported module|network/i.test(e.message)) throw new Error('Não foi possível carregar o leitor de PDF. Atualize a página e tente novamente.');
