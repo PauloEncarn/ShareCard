@@ -66,7 +66,9 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   useEffect(() => {
     if (inviteToken === null) return;
     if (inviteToken) return;
-    const cached = cachedWorkspace(section);
+    // Perfil nunca pode aproveitar o cache de gestão: ele pode pertencer ao
+    // master que usou este navegador antes do comprador entrar.
+    const cached = section === 'profile' ? null : cachedWorkspace(section);
     if (cached) { setAccount(cached.account); setCards(cached.cards); setDocuments(cached.documents); setMembers(cached.members); setLoading(false); return; }
     api<Account>('me').then(async current => {
       if (!embedded) { window.location.replace('/organizador'); return; }

@@ -17,6 +17,8 @@ export type Statement = {
   card?: { issuer: string; last4?: string; dueDay: number };
   nextTotal?: number; laterTotal?: number; transactions: Transaction[];
   holderTotals: { name: string; cents: number }[]; warnings: string[]; importedAt: string;
+  /** Data em que o dono informou que esta fatura foi paga. */
+  paidAt?: string;
 };
 export type Person = { id: string; name: string; color: string; email?: string | null; phone?: string | null; monthlyLimitCents?: number; accountId?: string | null; version?: number };
 export type AppState = { version: 1; people: Person[]; statements: Statement[]; activeId: string | null };
