@@ -77,6 +77,34 @@ export async function deleteCard(account: SupabaseAccount, rawId: unknown) {
   if (!removed.data) throw new IdentityError(404, 'Cartão não encontrado. Atualize a tela e tente novamente.');
   return { ok: true };
 }
+export async function resetCards(account: SupabaseAccount) {
+  masterOnly(account);
+  const admin = createSupabaseAdminClient();
+  const [statementResult, workspaceResult] = await Promise.all([
+    admin.from('statements').select('storage_path').eq('master_id', account.masterId).returns<Array<{ storage_path: string }>>(),
+    admin.from('workspaces').select('state, version').eq('master_id', account.masterId).maybeSingle<{ state: unknown; version: number }>(),
+  ]);
+  if (statementResult.error || workspaceResult.error) throw new IdentityError(503, 'Não foi possível preparar a limpeza do espaço.');
+  let workspace: { state: unknown; version: number } | null = null;
+  if (workspaceResult.data?.state && typeof workspaceResult.data.state === 'object' && !Array.isArray(workspaceResult.data.state)) {
+    const current = workspaceResult.data.state as Record<string, unknown>;
+    const nextState = { ...current, statements: [], activeId: null };
+    const updated = await admin.from('workspaces').update({ state: nextState, version: workspaceResult.data.version + 1, updated_at: new Date().toISOString() }).eq('master_id', account.masterId).eq('version', workspaceResult.data.version).select('state, version').maybeSingle<{ state: unknown; version: number }>();
+    if (updated.error) throw new IdentityError(503, 'Não foi possível atualizar a organização.');
+    if (!updated.data) throw new IdentityError(409, 'A organização foi alterada por outra pessoa. Atualize e tente novamente.');
+    workspace = updated.data;
+  }
+  const removedStatements = await admin.from('statements').delete().eq('master_id', account.masterId);
+  if (removedStatements.error) throw new IdentityError(503, 'Não foi possível excluir as faturas.');
+  const paths = (statementResult.data || []).map(statement => statement.storage_path);
+  if (paths.length) {
+    const files = await admin.storage.from('statements').remove(paths);
+    if (files.error) throw new IdentityError(503, 'Faturas excluídas, mas não foi possível remover todos os PDFs. Tente novamente.');
+  }
+  const removedCards = await admin.from('cards').delete().eq('master_id', account.masterId);
+  if (removedCards.error) throw new IdentityError(503, 'As faturas foram excluídas, mas não foi possível remover os cartões. Tente novamente.');
+  return { ok: true, workspace };
+}
 export async function people(account: SupabaseAccount) {
   const result = await createSupabaseAdminClient().from('people').select('id, master_id, account_id, name, email, phone, color, monthly_limit_cents, version, created_at, updated_at').eq('master_id', account.masterId).order('name').returns<PersonRow[]>();
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar as pessoas.');
