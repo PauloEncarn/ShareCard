@@ -82,6 +82,18 @@ export async function registerMaster(input: Record<string, unknown>) {
       if (invitation.person_id) {
         const linked = await admin.from('people').update({ account_id: existingUser.id, updated_at: new Date().toISOString() }).eq('id', invitation.person_id).eq('master_id', invitation.master_id).is('account_id', null);
         if (linked.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível vincular a pessoa.');
+      } else {
+        // Convites gerados antes do vínculo explícito devem priorizar o mesmo
+        // e-mail da Pessoa cadastrada. O nome permanece apenas como reserva.
+        const byEmail = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('email', email).is('account_id', null).maybeSingle<{ id: string }>();
+        if (byEmail.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível localizar a pessoa.');
+        const byName = byEmail.data ? null : await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
+        if (byName?.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível localizar a pessoa.');
+        const personId = byEmail.data?.id || byName?.data?.id;
+        if (personId) {
+          const linked = await admin.from('people').update({ account_id: existingUser.id, updated_at: new Date().toISOString() }).eq('id', personId).eq('master_id', invitation.master_id).is('account_id', null);
+          if (linked.error) throw new IdentityError(503, 'O acesso foi reativado, mas não foi possível vincular a pessoa.');
+        } else await admin.from('people').insert({ master_id: invitation.master_id, account_id: existingUser.id, name, email, color: '#2563EB' });
       }
       return signIn(email, input.password);
     }
@@ -109,10 +121,17 @@ export async function registerMaster(input: Record<string, unknown>) {
       const linked = await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', invitation.person_id).eq('master_id', invitation.master_id).is('account_id', null);
       if (linked.error) throw new IdentityError(503, 'A conta foi criada, mas não foi possível vinculá-la ao comprador.');
     } else {
-      // Convites antigos não têm person_id. Mantemos esta compatibilidade uma única vez.
-      const unlinked = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
-      if (unlinked.data) await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', unlinked.data.id);
-      else await admin.from('people').insert({ master_id: invitation.master_id, account_id: user.id, name, email, color: '#2563EB' });
+      // Compatibilidade para convite antigo: o e-mail identifica a Pessoa com
+      // mais segurança; o nome só é usado se o e-mail não estiver cadastrado.
+      const byEmail = await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('email', email).is('account_id', null).maybeSingle<{ id: string }>();
+      if (byEmail.error) throw new IdentityError(503, 'A conta foi criada, mas não foi possível localizar a pessoa.');
+      const byName = byEmail.data ? null : await admin.from('people').select('id').eq('master_id', invitation.master_id).eq('name', name).is('account_id', null).maybeSingle<{ id: string }>();
+      if (byName?.error) throw new IdentityError(503, 'A conta foi criada, mas não foi possível localizar a pessoa.');
+      const personId = byEmail.data?.id || byName?.data?.id;
+      if (personId) {
+        const linked = await admin.from('people').update({ account_id: user.id, updated_at: new Date().toISOString() }).eq('id', personId).eq('master_id', invitation.master_id).is('account_id', null);
+        if (linked.error) throw new IdentityError(503, 'A conta foi criada, mas não foi possível vinculá-la à pessoa.');
+      } else await admin.from('people').insert({ master_id: invitation.master_id, account_id: user.id, name, email, color: '#2563EB' });
     }
   }
 
