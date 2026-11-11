@@ -7,6 +7,7 @@ type CardRow = { id: string; master_id: string; name: string; due_day: number; i
 type PersonRow = { id: string; master_id: string; account_id: string | null; name: string; email?: string | null; phone?: string | null; color: string; monthly_limit_cents: number | null; version: number; created_at: string; updated_at: string };
 type ProfileRow = { id: string; master_id: string; role: 'master' | 'buyer'; name: string; active: boolean };
 type StatementRow = { id: string; master_id: string; card_id: string; due_date: string; filename: string; storage_path: string; sha256: string; size_bytes: number; created_at: string };
+type InvitationRow = { person_id: string | null; expires_at: string; used_at: string | null; created_at: string };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const code = () => randomBytes(32).toString('hex');
 const text = (value: unknown, label: string, max: number) => {
@@ -110,6 +111,22 @@ export async function people(account: SupabaseAccount) {
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar as pessoas.');
   const rows = result.data || [];
   return (account.role === 'master' ? rows : rows.filter(row => row.account_id === account.id)).map(publicPerson);
+}
+export async function invitationStatuses(account: SupabaseAccount) {
+  masterOnly(account);
+  const admin = createSupabaseAdminClient();
+  const [peopleResult, invitationsResult] = await Promise.all([
+    admin.from('people').select('id, account_id').eq('master_id', account.masterId).returns<Array<{ id: string; account_id: string | null }>>(),
+    admin.from('invitations').select('person_id, expires_at, used_at, created_at').eq('master_id', account.masterId).order('created_at', { ascending: false }).returns<InvitationRow[]>(),
+  ]);
+  if (peopleResult.error || invitationsResult.error) throw new IdentityError(503, 'Não foi possível consultar os convites.');
+  const newest = new Map<string, InvitationRow>();
+  for (const invitation of invitationsResult.data || []) if (invitation.person_id && !newest.has(invitation.person_id)) newest.set(invitation.person_id, invitation);
+  return (peopleResult.data || []).reduce<Record<string, { status: 'accepted' | 'pending' | 'expired' | 'not_sent'; at?: string }>>((result, person) => {
+    if (person.account_id) result[person.id] = { status: 'accepted' };
+    else { const invite = newest.get(person.id); result[person.id] = !invite ? { status: 'not_sent' } : invite.used_at ? { status: 'accepted', at: invite.used_at } : new Date(invite.expires_at).getTime() > Date.now() ? { status: 'pending', at: invite.expires_at } : { status: 'expired', at: invite.expires_at }; }
+    return result;
+  }, {});
 }
 
 export async function savePerson(account: SupabaseAccount, input: Record<string, unknown>, id?: string) {

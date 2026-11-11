@@ -18,6 +18,7 @@ const initials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).m
 type CloudCard = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null };
 type BuyerSummary = { statement: { dueDate: string | null; totalCents: number | null } | null; personalCents: number; purchaseCount: number; pendingCount: number; status?: 'ready' | 'no_purchases' | 'no_statement' | 'person_not_linked' | 'person_not_in_workspace'; purchases?: Array<{ merchant: string; date: string; cents: number; assigned: boolean }> };
 type CloudPerson = Person & { masterId?: string; version: number };
+type InvitationStatus = { status: 'accepted' | 'pending' | 'expired' | 'not_sent'; at?: string };
 const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const cloudBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
 const cloudEndpoint = (path: string) => cloudBackend === 'floci'
@@ -31,6 +32,10 @@ const cardTheme = (issuer?: string) => {
   if (normalized.includes('caixa')) return 'caixa';
   return 'itau';
 };
+const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+function easterSunday(year: number) { const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451); return new Date(Date.UTC(year, Math.floor((h + l - 7 * m + 114) / 31), (h + l - 7 * m + 114) % 31 + 1)); }
+function brazilNationalHolidays(year: number) { const easter = easterSunday(year), goodFriday = new Date(easter); goodFriday.setUTCDate(goodFriday.getUTCDate() - 2); return new Set([`${year}-01-01`, `${year}-04-21`, `${year}-05-01`, `${year}-09-07`, `${year}-10-12`, `${year}-11-02`, `${year}-11-15`, `${year}-11-20`, `${year}-12-25`, isoDate(goodFriday)]); }
+function realDueDate(reference: string, dueDay: number) { const [year, month] = reference.split('-').map(Number), lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate(); const date = new Date(Date.UTC(year, month - 1, Math.min(dueDay, lastDay))); const holidays = brazilNationalHolidays(year); while (date.getUTCDay() === 0 || date.getUTCDay() === 6 || holidays.has(isoDate(date))) date.setUTCDate(date.getUTCDate() + 1); return isoDate(date); }
 function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); return () => ref.current?.close(); }, []);
@@ -62,10 +67,14 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const [candidateFile, setCandidateFile] = useState<File | null>(null);
   const [cloudCards, setCloudCards] = useState<CloudCard[]>([]);
   const [importFallbackCardId, setImportFallbackCardId] = useState('');
+  const [importCardSetup, setImportCardSetup] = useState(false);
+  const [newImportCard, setNewImportCard] = useState({ issuer: 'Itaú', name: '', last4: '', dueDay: '' });
+  const [dueDateConflict, setDueDateConflict] = useState<{ actual: string; expected: string; card: string } | null>(null);
   const [cloudMaster, setCloudMaster] = useState(false);
   const [cloudAccountName, setCloudAccountName] = useState('');
   const [cloudBuyer, setCloudBuyer] = useState(false);
   const [buyerSummary, setBuyerSummary] = useState<BuyerSummary | null>(null);
+  const [invitationStatuses, setInvitationStatuses] = useState<Record<string, InvitationStatus>>({});
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [category, setCategory] = useState('all');
@@ -123,6 +132,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     };
     void loadCloud();
   }, []);
+  useEffect(() => { if (!cloudMaster) return; fetch(cloudEndpoint('invitations'), { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null).then(result => { if (result) setInvitationStatuses(result as Record<string, InvitationStatus>); }).catch(() => {}); }, [cloudMaster]);
   useEffect(() => {
     const context = document.modelContext;
     if (!context?.registerTool) return;
@@ -186,10 +196,9 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       const candidate = carryAssignments(parsed, state.statements.filter(s => s.id !== 'demo'));
       const detectedCard = candidate.card;
       const matchedCard = detectedCard ? cloudCards.find(card => detectedCard.last4 ? card.issuer === detectedCard.issuer && card.last4 === detectedCard.last4 : card.dueDay === detectedCard.dueDay) : undefined;
-      // A escolha só é necessária quando o PDF não revelar um cartão. Ela fica
-      // no passo de conferência, nunca como configuração persistente da tela.
-      setImportFallbackCardId(matchedCard?.id ?? cloudCards[0]?.id ?? '');
-      setCandidateFile(file); setCandidate(candidate);
+      setImportFallbackCardId(matchedCard?.id ?? '');
+      setNewImportCard({ issuer: detectedCard?.issuer || 'Itaú', name: detectedCard ? cardLabel(detectedCard) : '', last4: detectedCard?.last4 || '', dueDay: String(detectedCard?.dueDay || '') });
+      setCandidateFile(file); setCandidate(candidate); setImportCardSetup(cloudMaster);
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível ler o PDF.'); }
     finally { setBusy(false); if (input.current) input.current.value = ''; }
   }
@@ -206,7 +215,15 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     }
     setCandidate({ ...candidate, transactions: candidate.transactions.map(transaction => transaction.id === transactionId && !isSharedCost(transaction) ? { ...transaction, buyerId: buyerId || null, inheritedFromPrevious: false, allocations: buyerId ? [{ personId: buyerId, cents: transaction.cents }] : [] } : transaction) });
   }
-  async function confirmImport() {
+  async function chooseImportCard() {
+    if (importFallbackCardId) { setImportCardSetup(false); return; }
+    const last4 = newImportCard.last4.replace(/\D/g, ''); const dueDay = Number(newImportCard.dueDay);
+    if (!newImportCard.name.trim() || !/^\d{4}$/.test(last4) || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) { setFormError('Para criar o cartão, informe banco, nome, os 4 últimos números e o dia de vencimento.'); return; }
+    setBusy(true); setFormError('');
+    try { const response = await fetch(cloudEndpoint('cards'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newImportCard, last4, dueDay }) }); const created = await response.json() as CloudCard & { error?: string }; if (!response.ok) throw new Error(created.error || 'Não foi possível criar o cartão agora.'); setCloudCards(previous => [...previous, created].sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name))); setImportFallbackCardId(created.id); setImportCardSetup(false); } catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível criar o cartão agora.'); } finally { setBusy(false); }
+  }
+  async function confirmImport(ignoreDueDateWarning?: unknown) {
+    const ignoreWarning = ignoreDueDateWarning === true;
     if (!candidate || sum(candidate.transactions) !== candidate.total || !candidate.dueDate || !candidate.transactions.length) return;
     if (state.statements.some(s => s.dueDate === candidate.dueDate && s.total === candidate.total && s.id !== 'demo')) { setFormError('Já existe uma fatura com este vencimento e total. Confira o histórico antes de importar novamente.'); return; }
     let storageDocumentId: string | undefined;
@@ -214,17 +231,10 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       if (!candidateFile) { setFormError('Selecione o PDF da fatura novamente.'); return; }
       setBusy(true);
       try {
-        const matchedCard = candidate.card ? cloudCards.find(card => candidate.card!.last4 ? card.issuer === candidate.card!.issuer && card.last4 === candidate.card!.last4 : card.dueDay === candidate.card!.dueDay) : undefined;
-        let selectedCardId = matchedCard?.id ?? (candidate.card ? '' : importFallbackCardId);
-        if (!selectedCardId && candidate.card) {
-          const response = await fetch(cloudEndpoint('cards'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: cardLabel(candidate.card), dueDay: candidate.card.dueDay, issuer: candidate.card.issuer, last4: candidate.card.last4 }) });
-          const created = await response.json() as CloudCard & { error?: string };
-          if (!response.ok) throw new Error(created.error || 'Não foi possível cadastrar o cartão identificado.');
-          selectedCardId = created.id;
-          setCloudCards(previous => [...previous, created].sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name)));
-          setImportFallbackCardId(created.id);
-        }
-        if (!selectedCardId) throw new Error('Não identificamos o cartão. Escolha o cartão desta fatura antes de importar.');
+        const selectedCardId = importFallbackCardId, selectedCard = cloudCards.find(card => card.id === selectedCardId);
+        if (!selectedCardId || !selectedCard) { setImportCardSetup(true); setBusy(false); return; }
+        const expectedDate = realDueDate(candidate.dueDate, selectedCard.dueDay);
+        if (!ignoreWarning && expectedDate !== candidate.dueDate) { setDueDateConflict({ actual: candidate.dueDate, expected: expectedDate, card: selectedCard.name }); setBusy(false); return; }
         if (cloudBackend === 'supabase') {
           const response = await fetch(`${cloudEndpoint('documents')}?cardId=${encodeURIComponent(selectedCardId)}&dueDate=${encodeURIComponent(candidate.dueDate)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/pdf', 'X-ShareCard-Filename': candidateFile.name }, body: candidateFile });
           const result = await response.json() as { id?: string; error?: string };
@@ -359,7 +369,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
           {active && <><div className="statement-toolbar statement-context"><div className="statement-identity"><div className={`statement-card-preview ${cardTheme(active.card?.issuer)}`} aria-hidden="true"><span>{active.card?.issuer || 'Cartão'}</span><strong>{active.card?.last4 ? `•••• ${active.card.last4}` : 'FATURA'}</strong><small>Vence dia {String(active.card?.dueDay ?? Number(active.dueDate.slice(-2))).padStart(2, '0')}</small></div><div><label className="sr-only" htmlFor="statement">Fatura selecionada</label><select id="statement" value={active.id} onChange={e => { setState({ ...state, activeId: e.target.value }); setSearch(''); setFilter('all'); setCategory('all'); }}>{[...state.statements].sort((a, b) => b.dueDate.localeCompare(a.dueDate)).map(s => <option key={s.id} value={s.id}>{s.card ? cardLabel(s.card) : 'Cartão da fatura'} · {monthLabel(s.dueDate)}</option>)}</select><span>Vencimento em {dateLabel(active.dueDate)} · {money(active.total)}</span></div></div><div className="toolbar-actions"><span className="verified"><CheckCheck width={15} height={15}/>{sum(transactions) === active.total ? 'Total conferido' : 'Revisão necessária'}</span><button className={`button compact payment-button ${active.paidAt ? 'paid' : 'primary'}`} onClick={() => { setPaymentStatement(active); setPaidDate(active.paidAt || new Date().toISOString().slice(0, 10)); }}><Check width={15} height={15}/>{active.paidAt ? `Pago em ${dateLabel(active.paidAt)}` : 'Informar pagamento'}</button><button className="button secondary compact" onClick={exportCsv}><ArrowDownToLine width={15} height={15}/> Exportar CSV</button><button className="icon-button" aria-label="Excluir fatura" onClick={() => setDeleteId(active.id)}><Trash2 width={17} height={17}/></button></div></div>
           {sum(transactions) !== active.total && <div className="notice danger" role="alert"><CircleAlert width={17} height={17}/>Os lançamentos diferem do total do banco em {money(active.total - sum(transactions))}. Confira as correções antes de usar os valores.</div>}
           </>}
-          {tab === 'people' && ready && <PeopleWorkspace state={{ ...state, people: state.people.filter(person => !['master', 'eu'].includes(person.name.trim().toLocaleLowerCase())) }} statement={active} personId={personId} onAdd={() => openPerson()} onEdit={openPerson} onDelete={p => { setPersonDelete(p); setFormError(''); }} onTransaction={t => { setEditing(t); setFormError(''); }} onSplit={openSplit} onInvite={invitePerson}/>}
+          {tab === 'people' && ready && <PeopleWorkspace state={{ ...state, people: state.people.filter(person => !['master', 'eu'].includes(person.name.trim().toLocaleLowerCase())) }} statement={active} personId={personId} invitationStatuses={invitationStatuses} onAdd={() => openPerson()} onEdit={openPerson} onDelete={p => { setPersonDelete(p); setFormError(''); }} onTransaction={t => { setEditing(t); setFormError(''); }} onSplit={openSplit} onInvite={invitePerson}/>}
           {active && <>
           {tab === 'overview' && <div className="stats-grid"><article className="stat-card main-stat"><div className="stat-label">Total da fatura <CreditCard width={19} height={19}/></div><strong>{money(active.total)}</strong><div className="stat-foot">{transactions.length} lançamentos <span>Vence {dateLabel(active.dueDate).slice(0, 5)}</span></div></article><article className="stat-card"><div className="stat-label">Já distribuído <Users width={19} height={19}/></div><strong>{money(sum(transactions) - pending)}</strong><div className="progress-track"><span style={{ width: `${transactions.length ? allocatedCount / transactions.length * 100 : 0}%` }}/></div><small>{allocatedCount} de {transactions.length} lançamentos completos</small></article><article className="stat-card"><div className="stat-label">Falta dividir <span className="amber-icon"><Settings2 width={19} height={19}/></span></div><strong>{money(pending)}</strong><button className="stat-link" onClick={() => { setTab('transactions'); setFilter('pending'); }}>{pendingCount ? `${pendingCount} lançamentos para revisar` : 'Tudo atribuído'}<ArrowRight width={15} height={15}/></button></article></div>}
 
@@ -382,6 +392,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       </div>
     </main>
     {message && <div className="toast" role="status"><CircleAlert width={18} height={18}/><span>{message}</span><button onClick={() => setMessage('')} aria-label="Fechar aviso"><X width={16} height={16}/></button></div>}
+    {importCardSetup && candidate && <div className="import-flow-overlay" role="dialog" aria-modal="true" aria-label="Escolha o cartão da fatura"><section className="import-flow-card"><span className="eyebrow">ANTES DE IMPORTAR</span><h2>Qual é o cartão desta fatura?</h2><p>O cartão define o ciclo de vencimento. O PDF informa a data real desta fatura e suas compras.</p>{cloudCards.length > 0 && <label className="field">Cartão já cadastrado<select value={importFallbackCardId} onChange={event => setImportFallbackCardId(event.target.value)}><option value="">Criar outro cartão</option>{cloudCards.map(card => <option key={card.id} value={card.id}>{card.issuer || card.name} •••• {card.last4 || '—'} · vence dia {card.dueDay}</option>)}</select></label>}{!importFallbackCardId && <div className="import-card-fields"><label className="field">Banco<select value={newImportCard.issuer} onChange={event => setNewImportCard(current => ({ ...current, issuer: event.target.value }))}><option>Itaú</option><option>Nubank</option><option>Caixa</option></select></label><label className="field">Nome do cartão<input value={newImportCard.name} onChange={event => setNewImportCard(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: cartão principal"/></label><label className="field">4 últimos números<input inputMode="numeric" maxLength={4} value={newImportCard.last4} onChange={event => setNewImportCard(current => ({ ...current, last4: event.target.value.replace(/\D/g, '') }))} placeholder="1234"/></label><label className="field">Dia de vencimento<input type="number" min="1" max="31" value={newImportCard.dueDay} onChange={event => setNewImportCard(current => ({ ...current, dueDay: event.target.value }))} placeholder="20"/></label></div>}{formError && <p className="error-text" role="alert">{formError}</p>}<div className="modal-actions"><button className="button secondary" type="button" onClick={() => { setImportCardSetup(false); setCandidate(null); setCandidateFile(null); }}>Cancelar importação</button><button className="button primary" type="button" disabled={busy} onClick={() => void chooseImportCard()}>{busy ? 'Salvando…' : importFallbackCardId ? 'Usar este cartão' : 'Criar e continuar'}</button></div></section></div>}
+    {dueDateConflict && <div className="import-flow-overlay" role="dialog" aria-modal="true" aria-label="Conferir vencimento real"><section className="import-flow-card due-date-warning"><span className="eyebrow">CONFIRA O VENCIMENTO</span><h2>O PDF não bate com o ciclo do cartão.</h2><p>Para <strong>{dueDateConflict.card}</strong>, o próximo vencimento esperado seria <strong>{dateLabel(dueDateConflict.expected)}</strong>, considerando fins de semana e feriados nacionais. O PDF informa <strong>{dateLabel(dueDateConflict.actual)}</strong>.</p><p className="helper">Isso pode indicar a escolha de outro cartão ou uma exceção do emissor. O vencimento real do PDF será preservado no histórico.</p><div className="modal-actions"><button className="button secondary" onClick={() => setDueDateConflict(null)}>Revisar cartão</button><button className="button primary" onClick={() => { setDueDateConflict(null); void confirmImport(true); }}>Continuar com o vencimento do PDF</button></div></section></div>}
     {paymentStatement && <Modal title={paymentStatement.paidAt ? 'Pagamento informado' : 'Informar pagamento'} onClose={() => setPaymentStatement(null)}><p className="modal-description">Registre a data em que a fatura de {money(paymentStatement.total)} foi paga. Isso organiza o acompanhamento; nenhum pagamento é realizado pelo ShareCard.</p><label className="field">Data do pagamento<input type="date" value={paidDate} onChange={event => setPaidDate(event.target.value)} max={new Date().toISOString().slice(0, 10)}/></label><div className="modal-actions">{paymentStatement.paidAt && <button className="text-button" onClick={() => { updateStatement(statement => ({ ...statement, paidAt: undefined })); setPaymentStatement(null); setMessage('Pagamento removido desta fatura.'); }}>Desfazer marcação</button>}<button className="button secondary" onClick={() => setPaymentStatement(null)}>Cancelar</button><button className="button primary" disabled={!paidDate} onClick={() => { updateStatement(statement => ({ ...statement, paidAt: paidDate })); setPaymentStatement(null); setMessage(`Pagamento registrado em ${dateLabel(paidDate)}.`); }}><Check width={17} height={17}/> Confirmar pagamento</button></div></Modal>}
 
     {personModal && <Modal title={personEditing ? 'Editar pessoa' : 'Adicionar pessoa'} onClose={() => setPersonModal(false)}><form onSubmit={e => { e.preventDefault(); savePerson(); }}><p className="modal-description">Cadastre quem participa das compras. O e-mail é opcional e permite enviar um convite para a própria pessoa acompanhar os gastos.</p><label className="field">Nome<input autoFocus maxLength={40} value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Ex.: Maria" required/></label><label className="field">E-mail <small>opcional</small><input type="email" inputMode="email" value={personEmail} onChange={e => setPersonEmail(e.target.value)} placeholder="maria@email.com"/></label><label className="field">Telefone <small>opcional</small><input type="tel" inputMode="tel" value={personPhone} onChange={e => setPersonPhone(e.target.value)} placeholder="(11) 99999-9999"/></label><label className="field">Limite por fatura (R$)<input inputMode="decimal" value={personLimit} onChange={e => setPersonLimit(e.target.value)} placeholder="Opcional. Ex.: 800,00"/></label><label className="field">Cor de identificação<input type="color" value={personColor} onChange={e => setPersonColor(e.target.value)}/></label>{formError && <p className="error-text" role="alert">{formError}</p>}<div className="modal-actions"><button type="button" className="button secondary" onClick={() => setPersonModal(false)}>Cancelar</button><button className="button primary">{personEditing ? 'Salvar pessoa' : 'Adicionar pessoa'}</button></div></form></Modal>}

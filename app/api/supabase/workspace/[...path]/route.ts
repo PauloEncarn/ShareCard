@@ -1,5 +1,5 @@
 import { accountFromAccessToken, IdentityError } from '@/lib/supabase/identity';
-import { buyerSummary, cards, createCard, deleteCard, deleteDocument, documentUrl, documents, invite, members, people, resetCards, revokeMember, savePerson, saveWorkspace, updateCard, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
+import { buyerSummary, cards, createCard, deleteCard, deleteDocument, documentUrl, documents, invite, invitationStatuses, members, people, resetCards, revokeMember, savePerson, saveWorkspace, updateCard, uploadAvatar, uploadDocument, workspace } from '@/lib/supabase/workspace';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,7 @@ async function handle(request: Request, context: Context) {
     const path = (await context.params).path.join('/');
     if (request.method === 'GET' && path === 'cards') return Response.json(await cards(account), { headers });
     if (request.method === 'GET' && path === 'people') return Response.json(await people(account), { headers });
+    if (request.method === 'GET' && path === 'invitations') return Response.json(await invitationStatuses(account), { headers });
     if (request.method === 'GET' && path === 'members') return Response.json(await members(account), { headers });
     if (request.method === 'GET' && path === 'documents') return Response.json(await documents(account), { headers });
     if (request.method === 'GET' && path === 'workspace') return Response.json(await workspace(account), { headers });
