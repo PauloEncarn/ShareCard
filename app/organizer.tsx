@@ -107,7 +107,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const allocatedCount = transactions.length - pendingCount;
   const chart = projections.slice(0, 6);
   const maxChart = Math.max(1, ...chart.map(p => p.cents));
-  const candidateUsesStatementTotal = candidate?.card?.issuer === 'Nubank';
+  const candidateUsesStatementTotal = candidate?.card?.issuer?.toLocaleLowerCase() === 'nubank';
 
   useEffect(() => { if (message) { const timer = setTimeout(() => setMessage(''), 6500); return () => clearTimeout(timer); } }, [message]);
   useEffect(() => {
@@ -226,7 +226,9 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   }
   async function confirmImport(ignoreDueDateWarning?: unknown) {
     const ignoreWarning = ignoreDueDateWarning === true;
-    if (!candidate || (!candidateUsesStatementTotal && sum(candidate.transactions) !== candidate.total) || !candidate.dueDate || !candidate.transactions.length) return;
+    if (!candidate) { setFormError('Não há uma fatura pronta para importar. Selecione o PDF novamente.'); return; }
+    if (!candidate.dueDate || !candidate.transactions.length) { setFormError('Não foi possível identificar compras e vencimento suficientes para importar esta fatura.'); return; }
+    if (!candidateUsesStatementTotal && sum(candidate.transactions) !== candidate.total) { setFormError('A soma dos lançamentos não fecha com o total da fatura. Revise os itens antes de continuar.'); return; }
     if (state.statements.some(s => s.dueDate === candidate.dueDate && s.total === candidate.total && s.id !== 'demo')) { setFormError('Já existe uma fatura com este vencimento e total. Confira o histórico antes de importar novamente.'); return; }
     let storageDocumentId: string | undefined;
     if (cloudMaster) {
