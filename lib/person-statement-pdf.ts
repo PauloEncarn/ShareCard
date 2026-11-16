@@ -4,7 +4,9 @@ import type { Person, Statement } from './model';
 const pageSize: [number, number] = [595, 842];
 const navy = rgb(.06, .1, .2), blue = rgb(.15, .39, .92), teal = rgb(.08, .72, .65), purple = rgb(.55, .36, .95), orange = rgb(.98, .45, .09), slate = rgb(.34, .4, .52), line = rgb(.88, .9, .94);
 const money = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const pdfText = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '');
+// Helvetica supports Portuguese in WinAnsi. Keep accents in names and merchants;
+// only remove glyphs the built-in PDF font cannot render safely.
+const pdfText = (value: string) => value.replace(/[^\x20-\xFF]/g, '');
 
 export async function downloadPersonStatement(person: Person, statement: Statement) {
   const items = statement.transactions
@@ -12,12 +14,15 @@ export async function downloadPersonStatement(person: Person, statement: Stateme
     .filter(item => item.cents !== 0);
   const total = items.reduce((sum, item) => sum + item.cents, 0);
   const categories = new Set(items.map(item => item.transaction.category)).size;
+  const purchases = items.filter(item => item.transaction.kind === 'purchase').reduce((sum, item) => sum + item.cents, 0);
+  const shared = total - purchases;
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Fatura individual - ${person.name}`);
   pdf.setAuthor('ShareCard');
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const contact = [person.email, person.phone].filter(Boolean).join(' | ');
+  const generatedAt = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   let page = pdf.addPage(pageSize);
   let y = 650;
   let pageNumber = 1;
@@ -30,7 +35,7 @@ export async function downloadPersonStatement(person: Person, statement: Stateme
   const footer = () => {
     page.drawLine({ start: { x: 42, y: 52 }, end: { x: 553, y: 52 }, thickness: .8, color: line });
     y = 35;
-    write('ShareCard  |  Compartilhe compras. Organize pagamentos.', 42, 8, regular, slate);
+    write('ShareCard  |  Compras compartilhadas, pagamentos claros.', 42, 8, regular, slate);
     write(`Pagina ${pageNumber}`, 510, 8, regular, slate);
   };
   const header = (withSummary: boolean) => {
@@ -38,18 +43,20 @@ export async function downloadPersonStatement(person: Person, statement: Stateme
     page.drawRectangle({ x: 0, y: 742, width: 9, height: 100, color: blue });
     logo();
     y = 758;
-    write('FATURA INDIVIDUAL', 397, 9, bold, rgb(.75, .83, 1));
+    write('EXTRATO INDIVIDUAL', 397, 9, bold, rgb(.75, .83, 1));
     y = 716;
     write(person.name, 42, 22, bold);
     y = 695;
-    write(`Vencimento ${new Date(`${statement.dueDate}T12:00:00`).toLocaleDateString('pt-BR')}`, 42, 10, regular, slate);
+    write(`Referente à fatura com vencimento em ${new Date(`${statement.dueDate}T12:00:00`).toLocaleDateString('pt-BR')}`, 42, 10, regular, slate);
     if (contact) { y = 678; write(contact, 42, 9, regular, slate); }
     if (withSummary) {
-      page.drawRectangle({ x: 42, y: 590, width: 511, height: 64, color: rgb(.96, .98, 1), borderColor: line, borderWidth: 1 });
-      y = 630; write('SUA PARTE NESTA FATURA', 57, 8, bold, slate); y = 607; write(money(total), 57, 19, bold, blue);
-      y = 630; write('LANCAMENTOS', 292, 8, bold, slate); y = 607; write(String(items.length), 292, 19, bold, navy);
-      y = 630; write('CATEGORIAS', 424, 8, bold, slate); y = 607; write(String(categories), 424, 19, bold, navy);
-      y = 565;
+      page.drawRectangle({ x: 42, y: 575, width: 511, height: 79, color: rgb(.96, .98, 1), borderColor: line, borderWidth: 1 });
+      page.drawRectangle({ x: 42, y: 575, width: 7, height: 79, color: blue });
+      y = 630; write('VALOR A PAGAR PELO COMPRADOR', 62, 8, bold, slate); y = 603; write(money(total), 62, 22, bold, blue);
+      y = 630; write('COMPRAS', 292, 8, bold, slate); y = 608; write(money(purchases), 292, 13, bold, navy);
+      y = 630; write('RATEIOS GERAIS', 424, 8, bold, slate); y = 608; write(money(shared), 424, 13, bold, navy);
+      y = 584; write(`${items.length} lançamentos  |  ${categories} categorias  |  Gerado em ${generatedAt}`, 62, 8, regular, slate);
+      y = 550;
     } else y = 650;
   };
   const tableHeader = () => {
@@ -66,9 +73,10 @@ export async function downloadPersonStatement(person: Person, statement: Stateme
     y -= 24;
     write('Nenhum lancamento foi atribuido a esta pessoa nesta fatura.', 42, 11, regular, slate);
   }
-  for (const { transaction, cents } of items) {
+  for (const [index, { transaction, cents }] of items.entries()) {
     const needsNote = Boolean(transaction.note);
     if (y < (needsNote ? 118 : 101)) nextPage();
+    if (index % 2 === 1) page.drawRectangle({ x: 42, y: y - (needsNote ? 39 : 25), width: 511, height: needsNote ? 39 : 25, color: rgb(.985, .99, 1) });
     page.drawLine({ start: { x: 42, y: y + 6 }, end: { x: 553, y: y + 6 }, thickness: .6, color: line });
     write(transaction.merchant, 52, 10.5, bold);
     write(transaction.date, 322, 9, regular, slate);
