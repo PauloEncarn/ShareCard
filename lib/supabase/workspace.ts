@@ -45,7 +45,15 @@ export async function cards(account: SupabaseAccount) {
   let result = await admin.from('cards').select('id, master_id, name, due_day, issuer, last4, created_at').eq('master_id', account.masterId).order('due_day').returns<CardRow[]>();
   if (cardIdentityUnavailable(result.error)) result = await admin.from('cards').select('id, master_id, name, due_day, created_at').eq('master_id', account.masterId).order('due_day').returns<CardRow[]>();
   if (result.error) throw new IdentityError(503, 'Não foi possível consultar os cartões.');
-  return (result.data || []).map(publicCard);
+  const linked = await admin.from('statements').select('id, card_id, due_date').eq('master_id', account.masterId).returns<Array<{ id: string; card_id: string; due_date: string }>>();
+  if (linked.error) throw new IdentityError(503, 'Não foi possível consultar as faturas dos cartões.');
+  const documentIdsByCard = new Map<string, string[]>();
+  const dueDatesByCard = new Map<string, string[]>();
+  for (const statement of linked.data || []) {
+    documentIdsByCard.set(statement.card_id, [...(documentIdsByCard.get(statement.card_id) || []), statement.id]);
+    dueDatesByCard.set(statement.card_id, [...(dueDatesByCard.get(statement.card_id) || []), statement.due_date]);
+  }
+  return (result.data || []).map(row => ({ ...publicCard(row), statementIds: documentIdsByCard.get(row.id) || [], statementDueDates: dueDatesByCard.get(row.id) || [] }));
 }
 
 export async function createCard(account: SupabaseAccount, input: Record<string, unknown>) {
@@ -206,12 +214,21 @@ export async function documents(account: SupabaseAccount) {
   return (result.data || []).map(publicDocument);
 }
 
+function nextCardDueDate(dueDay: number) {
+  const now = new Date(), year = now.getFullYear(), month = now.getMonth();
+  const forMonth = (targetYear: number, targetMonth: number) => new Date(targetYear, targetMonth + 1, 0).getDate() < dueDay ? new Date(targetYear, targetMonth + 1, 0) : new Date(targetYear, targetMonth, dueDay);
+  let due = forMonth(year, month);
+  if (due < new Date(year, month, now.getDate())) due = forMonth(year, month + 1);
+  return due.toISOString().slice(0, 10);
+}
+
 export async function uploadDocument(account: SupabaseAccount, rawCardId: unknown, rawDate: unknown, bytes: Uint8Array, filename = 'fatura.pdf') {
   masterOnly(account);
   if (bytes.length < 5 || bytes.length > 15 * 1024 * 1024 || Buffer.from(bytes.subarray(0, 5)).toString() !== '%PDF-') throw new IdentityError(400, 'Envie um PDF válido de até 15 MB.');
-  const cardId = text(rawCardId, 'Cartão', 80), due = dueDate(rawDate), admin = createSupabaseAdminClient();
-  const card = await admin.from('cards').select('id').eq('id', cardId).eq('master_id', account.masterId).maybeSingle();
+  const cardId = text(rawCardId, 'Cartão', 80), admin = createSupabaseAdminClient();
+  const card = await admin.from('cards').select('id, due_day').eq('id', cardId).eq('master_id', account.masterId).maybeSingle<{ id: string; due_day: number }>();
   if (card.error || !card.data) throw new IdentityError(404, 'Cartão não encontrado.');
+  const due = rawDate ? dueDate(rawDate) : nextCardDueDate(card.data.due_day);
   const id = crypto.randomUUID(), storagePath = `masters/${account.masterId}/cards/${cardId}/due/${due}/${id}.pdf`, sha256 = createHash('sha256').update(bytes).digest('hex');
   const upload = await admin.storage.from('statements').upload(storagePath, bytes, { contentType: 'application/pdf', upsert: false });
   if (upload.error) throw new IdentityError(503, 'Não foi possível guardar o PDF.');

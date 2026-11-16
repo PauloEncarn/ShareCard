@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Calendar as CalendarDays, Check, Cloud, CreditCa
 import type { AppState } from '@/lib/model';
 
 type Account = { id: string; masterId: string; role: 'master' | 'buyer'; name: string; email: string; active: boolean; avatarUrl?: string | null };
-type Card = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null };
+type Card = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null; statementIds?: string[]; statementDueDates?: string[] };
 type Document = { id: string; cardId: string; dueDate: string; size: number; createdAt: string };
 type SavedWorkspace = { state: AppState | null; version: number };
 type WorkspaceCache = { account: Account; cards: Card[]; documents: Document[]; members: Account[]; managementLoaded: boolean; updatedAt: number };
@@ -44,7 +44,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   // por instantes dados de quem usou o navegador antes.
   const initial = section === 'profile' ? null : cachedWorkspace(section);
   const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => embedded && !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded && initial.cards.length)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [selectedCardId, setSelectedCardId] = useState(''), [cardEditor, setCardEditor] = useState<Card | 'new' | null>(null); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async (current: Account) => {
     if (section === 'profile') {
@@ -69,7 +69,13 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     // Perfil nunca pode aproveitar o cache de gestão: ele pode pertencer ao
     // master que usou este navegador antes do comprador entrar.
     const cached = section === 'profile' ? null : cachedWorkspace(section);
-    if (cached) { setAccount(cached.account); setCards(cached.cards); setDocuments(cached.documents); setMembers(cached.members); setLoading(false); return; }
+    if (cached) {
+      setAccount(cached.account); setCards(cached.cards); setCardsLoaded(Boolean(cached.managementLoaded && cached.cards.length)); setDocuments(cached.documents); setMembers(cached.members); setLoading(false);
+      // Dados em cache deixam a navegação fluida, mas a consulta em segundo
+      // plano impede que cartões ou faturas recém-salvos apareçam como vazios.
+      void refresh(cached.account).catch(() => {});
+      return;
+    }
     api<Account>('me').then(async current => {
       if (!embedded) { window.location.replace('/organizador'); return; }
       setAccount(current); await refresh(current);
@@ -124,9 +130,9 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     catch (reason) { setError((reason as Error).message); }
     finally { setBusy(false); }
   }
-  async function upload(file?: File, cardId?: string, dueDate?: string) {
-    if (!file || !cardId || !dueDate) return; setBusy(true); setError('');
-    try { await api(`documents?cardId=${encodeURIComponent(cardId)}&dueDate=${dueDate}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }); await refresh(account!); setNotice('PDF salvo no espaço privado do master.'); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
+  async function upload(file?: File, cardId?: string) {
+    if (!file || !cardId) return; setBusy(true); setError('');
+    try { await api(`documents?cardId=${encodeURIComponent(cardId)}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }); await refresh(account!); setNotice('PDF salvo no espaço privado. O vencimento cadastrado no cartão foi aplicado.'); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
   }
   async function uploadAvatar(file?: File) {
     if (!file) return;
@@ -185,7 +191,9 @@ function ProfilePhoto({ account }: { account: Account }) {
   return <label className="profile-photo-upload" title={`Adicionar ou trocar foto de ${account.name}`}><input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => choose(event.target.files?.[0])}/>{account.avatarUrl ? <img className="profile-photo" src={account.avatarUrl} alt={`Foto de ${account.name}`}/> : <span className="profile-photo profile-initial" aria-label={`${account.name} sem foto`}>{account.name.slice(0, 1).toUpperCase()}</span>}<span>Adicionar foto</span></label>;
 }
 
-function UploadForm({ cards, busy, fileRef, onUpload }: { cards: Card[]; busy: boolean; fileRef: RefObject<HTMLInputElement | null>; onUpload: (file?: File, cardId?: string, date?: string) => void }) {
-  const [file, setFile] = useState<File>(), [cardId, setCardId] = useState(cards[0]?.id || ''), [dueDate, setDueDate] = useState('');
-  return <section className="upload-band"><div><Upload/><span><strong>Guardar nova fatura</strong><small>Escolha o cartão e informe a data real do vencimento.</small></span></div><select aria-label="Cartão" value={cardId} onChange={event => setCardId(event.target.value)}>{cards.map(card => <option key={card.id} value={card.id}>{card.name} · dia {card.dueDay}</option>)}</select><input aria-label="Data real de vencimento" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)}/><label className="file-choice"><input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={event => setFile(event.target.files?.[0])}/><span>{file?.name || 'Selecionar PDF'}</span></label><button disabled={busy || !file || !dueDate} onClick={() => onUpload(file, cardId, dueDate)}>{busy ? 'Enviando…' : 'Guardar fatura'}</button></section>;
+function UploadForm({ cards, busy, fileRef, onUpload }: { cards: Card[]; busy: boolean; fileRef: RefObject<HTMLInputElement | null>; onUpload: (file?: File, cardId?: string) => void }) {
+  const [file, setFile] = useState<File>(), [cardId, setCardId] = useState(cards[0]?.id || '');
+  useEffect(() => { if (!cards.some(card => card.id === cardId)) setCardId(cards[0]?.id || ''); }, [cards, cardId]);
+  const selectedCard = cards.find(card => card.id === cardId);
+  return <section className="upload-band"><div><Upload/><span><strong>Guardar nova fatura</strong><small>Escolha o cartão. Usaremos o vencimento cadastrado: {selectedCard ? `dia ${String(selectedCard.dueDay).padStart(2, '0')}` : 'selecione um cartão'}.</small></span></div><select aria-label="Cartão" value={cardId} onChange={event => setCardId(event.target.value)}>{cards.map(card => <option key={card.id} value={card.id}>{card.issuer || card.name} •••• {card.last4 || '—'} · vence dia {String(card.dueDay).padStart(2, '0')}</option>)}</select><label className="file-choice"><input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={event => setFile(event.target.files?.[0])}/><span>{file?.name || 'Selecionar PDF'}</span></label><button disabled={busy || !file || !cardId} onClick={() => onUpload(file, cardId)}>{busy ? 'Enviando…' : 'Guardar fatura'}</button></section>;
 }
