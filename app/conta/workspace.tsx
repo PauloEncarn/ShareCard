@@ -39,7 +39,7 @@ const json = (body: object): RequestInit => ({ method: 'POST', body: JSON.string
 const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR');
 const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
-export default function CloudWorkspace({ embedded = false, section = 'management' }: { embedded?: boolean; section?: 'profile' | 'management' }) {
+export default function CloudWorkspace({ embedded = false, section = 'management', onStatementImport }: { embedded?: boolean; section?: 'profile' | 'management'; onStatementImport?: (file: File, cardId: string) => Promise<boolean> }) {
   // Perfil sempre consulta a sessão atual. Reutilizar cache aqui poderia exibir
   // por instantes dados de quem usou o navegador antes.
   const initial = section === 'profile' ? null : cachedWorkspace(section);
@@ -132,7 +132,17 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   }
   async function upload(file?: File, cardId?: string) {
     if (!file || !cardId) return; setBusy(true); setError('');
-    try { await api(`documents?cardId=${encodeURIComponent(cardId)}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }); await refresh(account!); setNotice('PDF salvo no espaço privado. O vencimento cadastrado no cartão foi aplicado.'); } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
+    try {
+      if (onStatementImport) {
+        const parsed = await onStatementImport(file, cardId);
+        if (parsed) setNotice('Fatura lida. Revise os lançamentos antes de confirmar a importação.');
+        return;
+      }
+      await api(`documents?cardId=${encodeURIComponent(cardId)}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } });
+      await refresh(account!);
+      setNotice('PDF salvo no espaço privado. O vencimento cadastrado no cartão foi aplicado.');
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
   }
   async function uploadAvatar(file?: File) {
     if (!file) return;
