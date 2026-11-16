@@ -72,6 +72,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const [candidateFile, setCandidateFile] = useState<File | null>(null);
   const [cloudCards, setCloudCards] = useState<CloudCard[]>([]);
   const [importFallbackCardId, setImportFallbackCardId] = useState('');
+  const [importSelectedCard, setImportSelectedCard] = useState<CloudCard | null>(null);
   const [importCardSetup, setImportCardSetup] = useState(false);
   const [newImportCard, setNewImportCard] = useState({ issuer: 'Itaú', name: '', last4: '', dueDay: '' });
   const [cloudMaster, setCloudMaster] = useState(false);
@@ -104,7 +105,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   const input = useRef<HTMLInputElement>(null);
   const rawActive = state.statements.find(s => s.id === state.activeId) ?? state.statements[0];
   const active = rawActive ? withSharedCharges(rawActive, state.people) : undefined;
-  const selectedImportCard = cloudCards.find(card => card.id === importFallbackCardId);
+  const selectedImportCard = importSelectedCard ?? cloudCards.find(card => card.id === importFallbackCardId);
   const registeredCardsWithStatement = cloudCards.map(card => ({ card, statement: [...state.statements].filter(statement => cardMatchesStatement(card, statement)).sort((a, b) => b.dueDate.localeCompare(a.dueDate))[0] }));
   const activeCloudCardId = active ? registeredCardsWithStatement.find(item => item.statement?.id === active.id)?.card.id ?? '' : '';
   const transactions = active?.transactions ?? [];
@@ -203,10 +204,10 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     if (master && !state.people.some(person => person.id === master!.id)) setState(previous => ({ ...previous, people: [...previous.people, master!] }));
     return { ...statement, transactions: guided };
   }
-  async function upload(file?: File, selectedCardId = '') {
+  async function upload(file?: File, selectedCard?: CloudCard) {
     if (!file || busy) return false;
-    if (!accountResolved) { setMessage('Estamos preparando seu espaço. Aguarde alguns segundos e tente importar novamente.'); return false; }
-    if (!cloudMaster) { setMessage('A importação de faturas está disponível para o dono do cartão.'); return false; }
+    if (!accountResolved && !selectedCard) { setMessage('Estamos preparando seu espaço. Aguarde alguns segundos e tente importar novamente.'); return false; }
+    if (!cloudMaster && !selectedCard) { setMessage('A importação de faturas está disponível para o dono do cartão.'); return false; }
     setBusy(true);
     try {
       const parsed = await readStatement(file);
@@ -215,9 +216,10 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
       const detectedCard = candidate.card;
       // A statement can contain additional cards. Never bind it automatically:
       // the master chooses an existing card or explicitly creates a new one.
-      setImportFallbackCardId(selectedCardId);
+      setImportFallbackCardId(selectedCard?.id || '');
+      setImportSelectedCard(selectedCard ?? null);
       setNewImportCard({ issuer: detectedCard?.issuer || 'Itaú', name: detectedCard ? cardLabel(detectedCard) : '', last4: detectedCard?.last4 || '', dueDay: String(detectedCard?.dueDay || '') });
-      setCandidateFile(file); setCandidate(candidate); setImportCardSetup(!selectedCardId);
+      setCandidateFile(file); setCandidate(candidate); setImportCardSetup(!selectedCard);
       return true;
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Não foi possível ler o PDF.'); return false; }
     finally { setBusy(false); if (input.current) input.current.value = ''; }
@@ -240,21 +242,21 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     const last4 = newImportCard.last4.replace(/\D/g, ''); const dueDay = Number(newImportCard.dueDay);
     if (!newImportCard.name.trim() || !/^\d{4}$/.test(last4) || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) { setFormError('Para criar o cartão, informe banco, nome, os 4 últimos números e o dia de vencimento.'); return; }
     setBusy(true); setFormError('');
-    try { const response = await fetch(cloudEndpoint('cards'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newImportCard, last4, dueDay }) }); const created = await response.json() as CloudCard & { error?: string }; if (!response.ok) throw new Error(created.error || 'Não foi possível criar o cartão agora.'); setCloudCards(previous => [...previous, created].sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name))); setImportFallbackCardId(created.id); setImportCardSetup(false); } catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível criar o cartão agora.'); } finally { setBusy(false); }
+    try { const response = await fetch(cloudEndpoint('cards'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newImportCard, last4, dueDay }) }); const created = await response.json() as CloudCard & { error?: string }; if (!response.ok) throw new Error(created.error || 'Não foi possível criar o cartão agora.'); setCloudCards(previous => [...previous, created].sort((a, b) => a.dueDay - b.dueDay || a.name.localeCompare(b.name))); setImportFallbackCardId(created.id); setImportSelectedCard(created); setImportCardSetup(false); } catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível criar o cartão agora.'); } finally { setBusy(false); }
   }
   async function confirmImport() {
     if (!candidate) { setFormError('Não há uma fatura pronta para importar. Selecione o PDF novamente.'); return; }
     if (!candidate.dueDate || !candidate.transactions.length) { setFormError('Não foi possível identificar compras e vencimento suficientes para importar esta fatura.'); return; }
     if (!candidateUsesStatementTotal && sum(candidate.transactions) !== candidate.total) { setFormError('A soma dos lançamentos não fecha com o total da fatura. Revise os itens antes de continuar.'); return; }
-    if (cloudMaster && !importFallbackCardId) { setImportCardSetup(true); return; }
+    if (!selectedImportCard) { setImportCardSetup(true); return; }
     if (state.statements.some(s => s.dueDate === candidate.dueDate && s.total === candidate.total && s.id !== 'demo')) { setFormError('Já existe uma fatura com este vencimento e total. Confira o histórico antes de importar novamente.'); return; }
     let storageDocumentId: string | undefined;
     let linkedCard: Statement['card'] | undefined;
-    if (cloudMaster) {
+    if (selectedImportCard) {
       if (!candidateFile) { setFormError('Selecione o PDF da fatura novamente.'); return; }
       setBusy(true);
       try {
-        const selectedCardId = importFallbackCardId, selectedCard = cloudCards.find(card => card.id === selectedCardId);
+        const selectedCardId = selectedImportCard.id, selectedCard = selectedImportCard;
         if (!selectedCardId || !selectedCard) { setImportCardSetup(true); setBusy(false); return; }
         linkedCard = { issuer: selectedCard.issuer || selectedCard.name, ...(selectedCard.last4 ? { last4: selectedCard.last4 } : {}), dueDay: selectedCard.dueDay };
         if (cloudBackend === 'supabase') {
@@ -387,7 +389,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
         {!ready && <div className="notice" role="status"><Cloud width={18}/><span>Preparando seu espaço compartilhado…</span></div>}{storageError && <div className="notice danger" role="alert"><CircleAlert width={18} height={18}/><span>{storageError}</span><button type="button" className="text-button" onClick={() => void refreshWorkspace().catch(error => setFormError(error instanceof Error ? error.message : 'Não foi possível atualizar agora.'))}>Atualizar agora</button></div>}
         <div className="page-heading"><div><div className="eyebrow">{cloudBuyer ? 'SEU ACOMPANHAMENTO' : 'MENOS CONTAS NA CABEÇA'}</div><h1>{cloudBuyer ? tab === 'overview' ? 'Suas compras, com clareza.' : tab === 'cards' ? 'Faturas do seu grupo.' : 'Seu perfil.' : tab === 'overview' ? 'Sua fatura, sem mistério.' : tab === 'transactions' ? 'Cada compra no seu lugar.' : tab === 'people' ? 'Tudo dividido, tudo claro.' : tab === 'cards' ? 'Cartões e compradores.' : tab === 'account' ? 'Minha conta.' : 'Olhe os próximos meses.'}</h1><p>{cloudBuyer ? tab === 'overview' ? 'Veja sua parte da fatura e acompanhe as compras vinculadas a você.' : tab === 'cards' ? 'Consulte os PDFs compartilhados pelo dono do cartão.' : 'Confira os dados da sua conta e sua foto no grupo.' : tab === 'overview' ? 'Entenda os gastos, divida as compras e planeje o que vem.' : tab === 'transactions' ? 'Confira os lançamentos e escolha quem fica com cada valor.' : tab === 'people' ? 'Veja quanto cabe a cada pessoa nesta fatura.' : tab === 'cards' ? 'Cadastre ou edite cartões, associe pessoas e guarde cada fatura no cartão correto.' : tab === 'account' ? 'Confira seu nome, e-mail, papel no grupo e foto de perfil.' : 'Acompanhe as parcelas que já estão comprometidas.'}</p></div>{tab === 'overview' && !active && cloudMaster && <button className="button primary" disabled={busy || !ready || !accountResolved} onClick={() => { setFormError(''); input.current?.click(); }}><Upload width={18} height={18}/>{busy ? 'Lendo fatura…' : 'Importar fatura'}</button>}<input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={e => upload(e.target.files?.[0])}/></div>
 
-        {cloudBuyer && tab === 'overview' ? <BuyerPanel summary={buyerSummary}/> : tab === 'cards' ? <CloudWorkspace embedded onStatementImport={(file, cardId) => upload(file, cardId)}/> : tab === 'account' ? <CloudWorkspace embedded section="profile"/> : !active && tab !== 'people' ? <section className="empty-workspace" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); upload(e.dataTransfer.files[0]); }}><div className="empty-art"><FileText width={48} height={48}/><span><Check width={18} height={18}/></span></div><span className="pill">COMECE POR AQUI</span><h2>Uma fatura. Tudo organizado.</h2><p>Arraste sua fatura Itaú em PDF e descubra quanto é de cada pessoa e o que já está previsto para os próximos meses.</p><button className="button primary" onClick={() => input.current?.click()} disabled={busy}>{busy ? 'Lendo PDF…' : 'Selecionar minha fatura'}<ArrowRight width={18} height={18}/></button><div className="empty-steps"><span><span>01</span> Importe o PDF</span><span><span>02</span> Divida as compras</span><span><span>03</span> Planeje o mês</span></div><small>PDF digital Itaú · Até 15 MB · Arquivo protegido no seu espaço</small></section> : <>
+        {cloudBuyer && tab === 'overview' ? <BuyerPanel summary={buyerSummary}/> : tab === 'cards' ? <CloudWorkspace embedded onStatementImport={(file, card) => upload(file, card)}/> : tab === 'account' ? <CloudWorkspace embedded section="profile"/> : !active && tab !== 'people' ? <section className="empty-workspace" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); upload(e.dataTransfer.files[0]); }}><div className="empty-art"><FileText width={48} height={48}/><span><Check width={18} height={18}/></span></div><span className="pill">COMECE POR AQUI</span><h2>Uma fatura. Tudo organizado.</h2><p>Arraste sua fatura Itaú em PDF e descubra quanto é de cada pessoa e o que já está previsto para os próximos meses.</p><button className="button primary" onClick={() => input.current?.click()} disabled={busy}>{busy ? 'Lendo PDF…' : 'Selecionar minha fatura'}<ArrowRight width={18} height={18}/></button><div className="empty-steps"><span><span>01</span> Importe o PDF</span><span><span>02</span> Divida as compras</span><span><span>03</span> Planeje o mês</span></div><small>PDF digital Itaú · Até 15 MB · Arquivo protegido no seu espaço</small></section> : <>
           {active && <><div className="statement-toolbar statement-context"><div className="statement-identity"><div className={`statement-card-preview ${cardTheme(active.card?.issuer)}`} aria-hidden="true"><span>{active.card?.issuer || 'Cartão'}</span><strong>{active.card?.last4 ? `•••• ${active.card.last4}` : 'FATURA'}</strong><small>Vence dia {String(active.card?.dueDay ?? Number(active.dueDate.slice(-2))).padStart(2, '0')}</small></div><div><label className="sr-only" htmlFor="statement">Fatura selecionada</label>{cloudCards.length ? <select id="statement" value={activeCloudCardId} onChange={event => { const next = registeredCardsWithStatement.find(item => item.card.id === event.target.value)?.statement; if (!next) { setMessage('Este cartão ainda não tem uma fatura importada.'); return; } setState({ ...state, activeId: next.id }); setSearch(''); setFilter('all'); setCategory('all'); }}>{registeredCardsWithStatement.map(({ card, statement }) => <option key={card.id} value={card.id} disabled={!statement}>{card.issuer || card.name} •••• {card.last4 || '—'}{statement ? ` · ${monthLabel(statement.dueDate)}` : ' · sem fatura'}</option>)}</select> : <select id="statement" value={active.id} onChange={e => { setState({ ...state, activeId: e.target.value }); setSearch(''); setFilter('all'); setCategory('all'); }}>{[...state.statements].sort((a, b) => b.dueDate.localeCompare(a.dueDate)).map(s => <option key={s.id} value={s.id}>{s.card ? cardLabel(s.card) : 'Cartão da fatura'} · {monthLabel(s.dueDate)}</option>)}</select>}<span>Vencimento em {dateLabel(active.dueDate)} · {money(active.total)}</span></div></div><div className="toolbar-actions"><span className="verified"><CheckCheck width={15} height={15}/>{sum(transactions) === active.total ? 'Total conferido' : 'Revisão necessária'}</span><button className={`button compact payment-button ${active.paidAt ? 'paid' : 'primary'}`} onClick={() => { setPaymentStatement(active); setPaidDate(active.paidAt || new Date().toISOString().slice(0, 10)); }}><Check width={15} height={15}/>{active.paidAt ? `Pago em ${dateLabel(active.paidAt)}` : 'Informar pagamento'}</button><button className="button secondary compact" onClick={exportCsv}><ArrowDownToLine width={15} height={15}/> Exportar CSV</button><button className="icon-button" aria-label="Excluir fatura" onClick={() => setDeleteId(active.id)}><Trash2 width={17} height={17}/></button></div></div>
           {!nubankStatement && sum(transactions) !== active.total && <div className="notice danger" role="alert"><CircleAlert width={17} height={17}/>Os lançamentos diferem do total do banco em {money(active.total - sum(transactions))}. Confira as correções antes de usar os valores.</div>}
           </>}

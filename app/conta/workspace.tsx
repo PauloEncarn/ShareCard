@@ -39,7 +39,7 @@ const json = (body: object): RequestInit => ({ method: 'POST', body: JSON.string
 const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR');
 const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
-export default function CloudWorkspace({ embedded = false, section = 'management', onStatementImport }: { embedded?: boolean; section?: 'profile' | 'management'; onStatementImport?: (file: File, cardId: string) => Promise<boolean> }) {
+export default function CloudWorkspace({ embedded = false, section = 'management', onStatementImport }: { embedded?: boolean; section?: 'profile' | 'management'; onStatementImport?: (file: File, card: Card) => Promise<boolean> }) {
   // Perfil sempre consulta a sessão atual. Reutilizar cache aqui poderia exibir
   // por instantes dados de quem usou o navegador antes.
   const initial = section === 'profile' ? null : cachedWorkspace(section);
@@ -134,7 +134,9 @@ export default function CloudWorkspace({ embedded = false, section = 'management
     if (!file || !cardId) return; setBusy(true); setError('');
     try {
       if (onStatementImport) {
-        const parsed = await onStatementImport(file, cardId);
+        const card = cards.find(item => item.id === cardId);
+        if (!card) throw new Error('Selecione um cartão antes de importar a fatura.');
+        const parsed = await onStatementImport(file, card);
         if (parsed) setNotice('Fatura lida. Revise os lançamentos antes de confirmar a importação.');
         return;
       }
