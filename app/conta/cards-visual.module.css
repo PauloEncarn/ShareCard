@@ -38,6 +38,8 @@
 .cardsSection :global(.selected-card-detail) { position: fixed; z-index: 101; left: 50%; top: 50%; width: min(680px, calc(100vw - 32px)); max-height: min(82vh, 720px); overflow: auto; transform: translate(-50%, -50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: 30px; border-radius: 20px; background: #fff; box-shadow: 0 28px 70px rgb(15 23 42 / 34%); }
 .cardsSection :global(.selected-card-close) { border: 0; background: transparent; color: #2563eb; font: inherit; font-weight: 800; cursor: pointer; }
 .cardsSection :global(.selected-card-navigation) { display:flex; align-items:center; justify-content:flex-end; gap:8px; width:100%; color:#64748b; font-size:.75rem; font-weight:700; }
+.cardsSection :global(.selected-card-picker) { min-width:0; flex:1 1 150px; }
+.cardsSection :global(.selected-card-picker select) { width:100%; min-height:38px; border:1px solid #dbeafe; border-radius:9px; background:#fff; color:#0f172a; font:inherit; font-weight:800; }
 .cardsSection :global(.selected-card-step) { display:inline-flex; align-items:center; gap:5px; min-height:38px; padding:0 9px; border:1px solid #dbeafe; border-radius:9px; background:#f8fbff; color:#1d4ed8; font:inherit; font-weight:800; cursor:pointer; }
 .cardsSection :global(.selected-card-step svg) { width:15px; height:15px; }
 .cardsSection :global(.selected-card-step:disabled) { cursor:not-allowed; opacity:.45; }
@@ -59,6 +61,8 @@
   .cardsSection :global(.selected-card-detail) { top:auto; bottom:0; width:100%; max-height:82vh; transform:translateX(-50%); align-items:flex-start; padding:24px 18px max(24px, env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; }
   .cardsSection :global(.selected-card-close) { min-height:44px; padding:8px 0; }
   .cardsSection :global(.selected-card-navigation) { justify-content:space-between; }
+  .cardsSection :global(.selected-card-picker) { flex-basis:100%; order:-1; }
+  .cardsSection :global(.selected-card-picker select) { min-height:44px; }
   .cardsSection :global(.selected-card-step) { min-height:44px; }
   .cardsSection :global(.selected-card-buyers) { width:100%; }
 }
