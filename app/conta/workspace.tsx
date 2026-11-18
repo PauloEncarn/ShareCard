@@ -9,28 +9,17 @@ type Account = { id: string; masterId: string; role: 'master' | 'buyer'; name: s
 type Card = { id: string; name: string; dueDay: number; issuer?: string; last4?: string | null; statementIds?: string[]; statementDueDates?: string[] };
 type Document = { id: string; cardId: string; dueDate: string; size: number; createdAt: string };
 type SavedWorkspace = { state: AppState | null; version: number };
-type WorkspaceCache = { account: Account; cards: Card[]; documents: Document[]; members: Account[]; managementLoaded: boolean; updatedAt: number };
-const CACHE_TTL_MS = 45_000;
-let workspaceCache: WorkspaceCache | null = null;
-const workspaceAccountKey = 'sharecard:workspace-account-id';
 const clearClientWorkspace = () => {
-  workspaceCache = null;
   if (typeof window === 'undefined') return;
   window.sessionStorage.removeItem('sharecard:workspace-stale');
-  window.sessionStorage.removeItem(workspaceAccountKey);
+  window.sessionStorage.removeItem('sharecard:workspace-account-id');
   window.localStorage.removeItem('fatura-em-dia:v1');
-};
-const cachedWorkspace = (section: 'profile' | 'management') => {
-  if (typeof window !== 'undefined' && window.sessionStorage.getItem('sharecard:workspace-stale') === '1') return null;
-  if (typeof window !== 'undefined' && workspaceCache && window.sessionStorage.getItem(workspaceAccountKey) !== workspaceCache.account.id) return null;
-  if (!workspaceCache || Date.now() - workspaceCache.updatedAt > CACHE_TTL_MS) return null;
-  return section === 'profile' || workspaceCache.managementLoaded ? workspaceCache : null;
 };
 const localHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const accountBackend = process.env.NEXT_PUBLIC_ACCOUNT_BACKEND === 'floci' || localHost && !process.env.NEXT_PUBLIC_SUPABASE_URL ? 'floci' : 'supabase';
 const endpoint = (path: string) => accountBackend === 'floci' ? `/api/backend/${path}` : ['register', 'login', 'me', 'logout'].includes(path) ? `/api/supabase/auth/${path}` : `/api/supabase/workspace/${path}`;
 const api = async <T,>(path: string, options?: RequestInit): Promise<T> => {
-  const response = await fetch(endpoint(path), { credentials: 'same-origin', ...options, headers: { ...(options?.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...options?.headers } });
+  const response = await fetch(endpoint(path), { credentials: 'same-origin', ...options, cache: 'no-store', headers: { ...(options?.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...options?.headers } });
   const data = response.headers.get('content-type')?.includes('json') ? await response.json() : null;
   if (!response.ok) throw new Error(data?.error || 'Não foi possível concluir esta ação.');
   return data as T;
@@ -40,22 +29,13 @@ const date = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString
 const size = (value: number) => value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 
 export default function CloudWorkspace({ embedded = false, section = 'management', onStatementImport }: { embedded?: boolean; section?: 'profile' | 'management'; onStatementImport?: (file: File, card: Card) => Promise<boolean> }) {
-  // Perfil sempre consulta a sessão atual. Reutilizar cache aqui poderia exibir
-  // por instantes dados de quem usou o navegador antes.
-  const initial = section === 'profile' ? null : cachedWorkspace(section);
-  const [account, setAccount] = useState<Account | null>(() => initial?.account ?? null), [loading, setLoading] = useState(() => embedded && !initial), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [cards, setCards] = useState<Card[]>(() => initial?.cards ?? []), [cardsLoaded, setCardsLoaded] = useState(() => Boolean(initial?.managementLoaded && initial.cards.length)), [documents, setDocuments] = useState<Document[]>(() => initial?.documents ?? []), [members, setMembers] = useState<Account[]>(() => initial?.members ?? []), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [account, setAccount] = useState<Account | null>(null), [loading, setLoading] = useState(() => embedded), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [cards, setCards] = useState<Card[]>([]), [cardsLoaded, setCardsLoaded] = useState(false), [documents, setDocuments] = useState<Document[]>([]), [members, setMembers] = useState<Account[]>([]), [workspaceState, setWorkspaceState] = useState<AppState | null>(null), [mode, setMode] = useState<'login'|'register'>('login'), [inviteToken, setInviteToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [selectedCardId, setSelectedCardId] = useState(''), [cardEditor, setCardEditor] = useState<Card | 'new' | null>(null), [cardToDelete, setCardToDelete] = useState<Card | null>(null); const fileInput = useRef<HTMLInputElement>(null), avatarInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(async (current: Account) => {
-    if (section === 'profile') {
-      workspaceCache = { ...(workspaceCache ?? { cards: [], documents: [], members: [], managementLoaded: false }), account: current, updatedAt: Date.now() };
-      window.sessionStorage.setItem(workspaceAccountKey, current.id);
-      return;
-    }
+    if (section === 'profile') return;
     const [nextCards, nextDocuments, nextMembers, savedWorkspace] = await Promise.all([api<Card[]>('cards'), api<Document[]>('documents'), current.role === 'master' ? api<Account[]>('members') : Promise.resolve([]), api<SavedWorkspace>('workspace')]);
     setCards(nextCards); setCardsLoaded(true); setDocuments(nextDocuments); setMembers(nextMembers); setWorkspaceState(savedWorkspace.state);
-    workspaceCache = { account: current, cards: nextCards, documents: nextDocuments, members: nextMembers, managementLoaded: true, updatedAt: Date.now() };
-    window.sessionStorage.setItem(workspaceAccountKey, current.id);
     window.sessionStorage.removeItem('sharecard:workspace-stale');
   }, [section]);
   useEffect(() => {
@@ -66,16 +46,6 @@ export default function CloudWorkspace({ embedded = false, section = 'management
   useEffect(() => {
     if (inviteToken === null) return;
     if (inviteToken) return;
-    // Perfil nunca pode aproveitar o cache de gestão: ele pode pertencer ao
-    // master que usou este navegador antes do comprador entrar.
-    const cached = section === 'profile' ? null : cachedWorkspace(section);
-    if (cached) {
-      setAccount(cached.account); setCards(cached.cards); setCardsLoaded(Boolean(cached.managementLoaded && cached.cards.length)); setDocuments(cached.documents); setMembers(cached.members); setLoading(false);
-      // Dados em cache deixam a navegação fluida, mas a consulta em segundo
-      // plano impede que cartões ou faturas recém-salvos apareçam como vazios.
-      void refresh(cached.account).catch(() => {});
-      return;
-    }
     api<Account>('me').then(async current => {
       if (!embedded) { window.location.replace('/organizador'); return; }
       setAccount(current); await refresh(current);
@@ -170,7 +140,7 @@ export default function CloudWorkspace({ embedded = false, section = 'management
       <div className="auth-heading"><span className="auth-heading-icon"><ShieldCheck/></span><h2>{inviteToken ? 'Seu convite está pronto' : mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h2><p>{inviteToken ? 'Crie ou reative sua conta para entrar no espaço compartilhado.' : mode === 'login' ? 'Acesse sua conta para continuar.' : 'Comece a organizar as compras do seu grupo.'}</p></div>
       {inviteToken && <p className="cloud-notice" role="status">Convite identificado. Use o e-mail que recebeu o convite e defina uma senha para continuar.</p>}
       <form onSubmit={authenticate}>{mode === 'register' && <label>Seu nome<input name="name" required maxLength={100} autoComplete="name" placeholder="Seu nome completo"/></label>}<label>E-mail<input name="email" type="email" required autoComplete="email" placeholder="seu@email.com"/></label><label>Senha<input name="password" type="password" minLength={6} maxLength={128} required autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? 'Digite sua senha' : 'Crie uma senha segura'}/><small>Use pelo menos 6 caracteres.</small></label>{mode === 'register' && !inviteToken && <label>Código de convite <span>opcional</span><input name="inviteToken" maxLength={64} placeholder="Cole seu código"/><small>Sem código, você cria um espaço master.</small></label>}{error && <p className="cloud-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={busy}>{busy ? 'Aguarde…' : mode === 'login' ? <>Entrar <ArrowRight/></> : inviteToken ? <>Ativar acesso <ArrowRight/></> : <>Criar conta <ArrowRight/></>}</button></form>
-      {!inviteToken && <p className="auth-switch">{mode === 'login' ? <>Ainda não tem uma conta? <button type="button" onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></> : <>Já possui uma conta? <button type="button" onClick={() => { setMode('login'); setError(''); }}>Entrar</button></>}</p>}<p className="local-mode"><ShieldCheck/> Seus dados são protegidos e seguros.</p>
+      {!inviteToken && <p className="auth-switch">{mode === 'login' ? <>Ainda não tem uma conta? <button type="button" onClick={() => { setMode('register'); setError(''); }}>Criar conta</button></> : <>Já possui uma conta? <button type="button" onClick={() => { setMode('login'); setError(''); }}>Entrar</button></>}</p>}
     </div></section>
   </main>;
   const cardName = (id: string) => cards.find(card => card.id === id)?.name || 'Cartão';

@@ -314,21 +314,33 @@ export async function buyerSummary(account: SupabaseAccount) {
     admin.from('people').select('id').eq('master_id', account.masterId).eq('account_id', account.id).maybeSingle<{ id: string }>(),
   ]);
   if (result.error) throw new IdentityError(503, 'Não foi possível abrir suas compras.');
-  if (personResult.error || !personResult.data) return { statement: null, personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'person_not_linked' as const };
+  if (personResult.error || !personResult.data) return { cards: [], personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'person_not_linked' as const };
   const databasePerson = personResult.data;
   const data = result.data?.state;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return { statement: null, personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'no_statement' as const };
-  const state = data as { people?: Array<{ id?: unknown; name?: unknown }>; statements?: Array<Record<string, unknown>>; activeId?: unknown };
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { cards: [], personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'no_statement' as const };
+  const state = data as { people?: Array<{ id?: unknown; name?: unknown }>; statements?: Array<Record<string, unknown>> };
   const person = state.people?.find(item => item.id === databasePerson.id);
   const statements = Array.isArray(state.statements) ? state.statements : [];
-  const statement = statements.find(item => item.id === state.activeId) || statements[0];
-  if (!person) return { statement: null, personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'person_not_in_workspace' as const };
-  if (!statement || !Array.isArray(statement.transactions)) return { statement: null, personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'no_statement' as const };
-  const purchases = statement.transactions.filter(item => item && typeof item === 'object').map(item => item as { merchant?: unknown; date?: unknown; cents?: unknown; allocations?: Array<{ personId?: unknown; cents?: unknown }>; buyerId?: unknown }).map(item => {
-    const allocation = item.allocations?.find(value => value.personId === person.id);
-    return allocation && typeof allocation.cents === 'number' ? { merchant: typeof item.merchant === 'string' ? item.merchant : 'Compra', date: typeof item.date === 'string' ? item.date : '', cents: allocation.cents, assigned: item.buyerId === person.id } : null;
-  }).filter((item): item is { merchant: string; date: string; cents: number; assigned: boolean } => !!item);
-  return { statement: { dueDate: typeof statement.dueDate === 'string' ? statement.dueDate : null, totalCents: typeof statement.total === 'number' ? statement.total : null }, personalCents: purchases.reduce((total, item) => total + item.cents, 0), purchaseCount: purchases.length, pendingCount: purchases.filter(item => !item.assigned).length, purchases: purchases.slice(0, 6), status: purchases.length ? 'ready' as const : 'no_purchases' as const };
+  if (!person) return { cards: [], personalCents: 0, purchaseCount: 0, pendingCount: 0, status: 'person_not_in_workspace' as const };
+  const cards = statements.map((statement, index) => {
+    const transactions = Array.isArray(statement.transactions) ? statement.transactions : [];
+    const purchases = transactions.filter(item => item && typeof item === 'object').map(item => item as { merchant?: unknown; date?: unknown; allocations?: Array<{ personId?: unknown; cents?: unknown }>; buyerId?: unknown }).map(item => {
+      const allocation = item.allocations?.find(value => value.personId === person.id);
+      return allocation && typeof allocation.cents === 'number' ? { merchant: typeof item.merchant === 'string' ? item.merchant : 'Compra', date: typeof item.date === 'string' ? item.date : '', cents: allocation.cents, assigned: item.buyerId === person.id } : null;
+    }).filter((item): item is { merchant: string; date: string; cents: number; assigned: boolean } => !!item);
+    if (!purchases.length) return null;
+    const rawCard = statement.card && typeof statement.card === 'object' ? statement.card as { issuer?: unknown; last4?: unknown; dueDay?: unknown } : null;
+    return {
+      id: typeof statement.id === 'string' ? statement.id : `statement-${index}`,
+      card: rawCard ? { issuer: typeof rawCard.issuer === 'string' ? rawCard.issuer : 'Cartão compartilhado', last4: typeof rawCard.last4 === 'string' ? rawCard.last4 : null, dueDay: typeof rawCard.dueDay === 'number' ? rawCard.dueDay : null } : null,
+      dueDate: typeof statement.dueDate === 'string' ? statement.dueDate : null,
+      personalCents: purchases.reduce((total, item) => total + item.cents, 0),
+      purchaseCount: purchases.length,
+      sharedCount: purchases.filter(item => !item.assigned).length,
+      purchases,
+    };
+  }).filter((item): item is NonNullable<typeof item> => !!item);
+  return { cards, personalCents: cards.reduce((total, card) => total + card.personalCents, 0), purchaseCount: cards.reduce((total, card) => total + card.purchaseCount, 0), pendingCount: cards.reduce((total, card) => total + card.sharedCount, 0), status: cards.length ? 'ready' as const : statements.length ? 'no_purchases' as const : 'no_statement' as const };
 }
 
 export async function saveWorkspace(account: SupabaseAccount, input: Record<string, unknown>) {
