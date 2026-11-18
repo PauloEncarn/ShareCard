@@ -50,7 +50,7 @@ function Modal({ title, children, onClose, wide = false }: { title: string; chil
 }
 function Avatar({ name, color, small = false }: { name: string; color: string; small?: boolean }) { return <span className={`avatar ${small ? 'small' : ''}`} style={{ background: color + '18', color }}>{initials(name)}</span>; }
 function OrganizerSkeleton() {
-  return <div className="app-shell app-shell-skeleton" aria-busy="true" aria-label="Carregando seu espaço"><aside className="sidebar"><div className="skeleton-brand skeleton-shimmer"/><div className="skeleton-nav">{Array.from({ length: 5 }, (_, index) => <span className="skeleton-line skeleton-shimmer" key={index}/>)}</div></aside><main><header className="topbar"><span className="skeleton-line skeleton-shimmer"/></header><div className="page-content"><div className="skeleton-heading"><span className="skeleton-line skeleton-shimmer"/><span className="skeleton-line skeleton-shimmer"/></div><div className="skeleton-stats">{Array.from({ length: 3 }, (_, index) => <article className="skeleton-card skeleton-shimmer" key={index}/>)}</div><section className="skeleton-panel skeleton-shimmer"/></div></main></div>;
+  return <main className="brand-loader" aria-busy="true" aria-label="Carregando ShareCard"><div className="brand-loader-glow"/><div className="brand-loader-mark" aria-hidden="true"><i/><i/><i/><i/></div><img className="brand-loader-logo" src="/brand/sharecard_logo.png" alt="ShareCard"/><div className="brand-loader-progress" aria-hidden="true"><span/></div><p>Organizando seu espaço</p></main>;
 }
 
 export default function Organizer({ initialTab = 'overview', personId }: { initialTab?: string; personId?: string }) {
