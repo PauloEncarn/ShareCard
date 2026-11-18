@@ -44,7 +44,7 @@ export function StateProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const response = await fetch(workspaceEndpoint, { credentials: 'same-origin' });
+    const response = await fetch(workspaceEndpoint, { credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json().catch(() => null) as { state?: unknown; version?: number; error?: string } | null;
     if (!response.ok || !payload || typeof payload.version !== 'number') {
       throw new Error(payload?.error || 'Não foi possível atualizar a organização.');
@@ -57,10 +57,7 @@ export function StateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [me, workspace] = await Promise.all([
-          fetch(identityEndpoint, { credentials: 'same-origin' }),
-          fetch(workspaceEndpoint, { credentials: 'same-origin' }),
-        ]);
+        const me = await fetch(identityEndpoint, { credentials: 'same-origin', cache: 'no-store' });
         if (me.ok) {
           // A sessão autenticada sempre usa o espaço remoto. Nunca reutilize um
           // rascunho de outro usuário que tenha ficado neste navegador.
@@ -71,6 +68,8 @@ export function StateProvider({ children }: { children: ReactNode }) {
             setReady(true);
             return;
           }
+
+          const workspace = await fetch(workspaceEndpoint, { credentials: 'same-origin', cache: 'no-store' });
 
           const saved = await workspace.json().catch(() => null) as { state?: unknown; version?: number; error?: string } | null;
           if (!workspace.ok || !saved || typeof saved.version !== 'number') {
@@ -144,6 +143,7 @@ export function StateProvider({ children }: { children: ReactNode }) {
         const response = await fetch(workspaceEndpoint, {
           method: 'POST',
           credentials: 'same-origin',
+          cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ state: snapshot, version: version.current }),
         });

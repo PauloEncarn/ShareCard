@@ -49,6 +49,9 @@ function Modal({ title, children, onClose, wide = false }: { title: string; chil
   return <dialog ref={ref} className={wide ? 'modal wide' : 'modal'} onCancel={onClose} aria-label={title}><div className="modal-heading"><h2>{title}</h2><button className="icon-button" onClick={onClose} aria-label="Fechar"><X width={20} height={20}/></button></div>{children}</dialog>;
 }
 function Avatar({ name, color, small = false }: { name: string; color: string; small?: boolean }) { return <span className={`avatar ${small ? 'small' : ''}`} style={{ background: color + '18', color }}>{initials(name)}</span>; }
+function OrganizerSkeleton() {
+  return <div className="app-shell app-shell-skeleton" aria-busy="true" aria-label="Carregando seu espaço"><aside className="sidebar"><div className="skeleton-brand skeleton-shimmer"/><div className="skeleton-nav">{Array.from({ length: 5 }, (_, index) => <span className="skeleton-line skeleton-shimmer" key={index}/>)}</div></aside><main><header className="topbar"><span className="skeleton-line skeleton-shimmer"/></header><div className="page-content"><div className="skeleton-heading"><span className="skeleton-line skeleton-shimmer"/><span className="skeleton-line skeleton-shimmer"/></div><div className="skeleton-stats">{Array.from({ length: 3 }, (_, index) => <article className="skeleton-card skeleton-shimmer" key={index}/>)}</div><section className="skeleton-panel skeleton-shimmer"/></div></main></div>;
+}
 
 export default function Organizer({ initialTab = 'overview', personId }: { initialTab?: string; personId?: string }) {
   const { state, setState, ready, storageError, refreshWorkspace } = useOrganizerState();
@@ -129,10 +132,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
   useEffect(() => {
     const loadCloud = async () => {
       try {
-        const [me, cardsResponse] = await Promise.all([
-          fetch(cloudEndpoint('me'), { credentials: 'same-origin', cache: 'no-store' }),
-          fetch(cloudEndpoint('cards'), { credentials: 'same-origin', cache: 'no-store' }),
-        ]);
+        const me = await fetch(cloudEndpoint('me'), { credentials: 'same-origin', cache: 'no-store' });
         if (!me.ok) return;
         setAuthenticated(true);
         const currentAccount = await me.json() as { role: string; name?: string };
@@ -144,6 +144,7 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
           return;
         }
         setCloudMaster(true);
+        const cardsResponse = await fetch(cloudEndpoint('cards'), { credentials: 'same-origin', cache: 'no-store' });
         if (!cardsResponse.ok) return;
         const cards = await cardsResponse.json() as CloudCard[];
         setCloudCards(cards);
@@ -186,8 +187,8 @@ export default function Organizer({ initialTab = 'overview', personId }: { initi
     if (accountResolved && !authenticated) router.replace('/acesso');
   }, [accountResolved, authenticated, router]);
 
-  if (!accountResolved) return <main className="page-content"><section className="empty-workspace"><span className="pill">CARREGANDO</span><h2>Preparando o seu espaço.</h2><p>Estamos confirmando sua sessão e carregando os dados mais recentes.</p></section></main>;
-  if (!authenticated) return <main className="page-content"><section className="empty-workspace"><span className="pill">ACESSO NECESSÁRIO</span><h2>Redirecionando para entrar.</h2><p>Para sua segurança, os dados do espaço não ficam visíveis sem uma sessão ativa.</p></section></main>;
+  if (!accountResolved) return <OrganizerSkeleton/>;
+  if (!authenticated) return <main className="session-redirect" aria-live="polite"><span className="session-spinner"/><span>Redirecionando para entrar…</span></main>;
 
   if (cloudBuyer && !buyerAllowedTab) {
     return <main className="page-content"><section className="empty-workspace"><span className="pill">ACESSO DO COMPRADOR</span><h2>Esta área é do master.</h2><p>Você será levado para a sua visão geral.</p></section></main>;
